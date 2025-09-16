@@ -18,7 +18,7 @@ const AMOCRM_DOMAIN = process.env.AMOCRM_DOMAIN || 'insain0';
 
 // Хранилище токенов (в продакшене используйте БД)
 let tokens = {
-    access_token: eyJ0eXAiOiJKV1QiLCJhbGciOiJSUzI1NiIsImp0aSI6ImIyNTJjZTMwZTNlODZlM2U4ZGQyMWQyNjQ4YjBkYjlmZDA2Yzk5YjMyNjQ3ZGVkMTg3NjQ1M2ZlZDVkZTc4ZGY1OGM2MWExMzU3NjQ1YTMyIn0.eyJhdWQiOiJkMzBiMjFlZS04NzhhLTRmZTQtOTQzNC1jY2MyYTEyYjIyZmQiLCJqdGkiOiJiMjUyY2UzMGUzZTg2ZTNlOGRkMjFkMjY0OGIwZGI5ZmQwNmM5OWIzMjY0N2RlZDE4NzY0NTNmZWQ1ZGU3OGRmNThjNjFhMTM1NzY0NWEzMiIsImlhdCI6MTc1ODAyNjI0OSwibmJmIjoxNzU4MDI2MjQ5LCJleHAiOjE3NTgwNjcyMDAsInN1YiI6IjEyOTMzNDU4IiwiZ3JhbnRfdHlwZSI6IiIsImFjY291bnRfaWQiOjMxNTEwMzM4LCJiYXNlX2RvbWFpbiI6ImFtb2NybS5ydSIsInZlcnNpb24iOjIsInNjb3BlcyI6WyJjcm0iLCJmaWxlcyIsImZpbGVzX2RlbGV0ZSIsIm5vdGlmaWNhdGlvbnMiLCJwdXNoX25vdGlmaWNhdGlvbnMiXSwidXNlcl9mbGFncyI6MCwiaGFzaF91dWlkIjoiMGJmNmQzZjItZWZkZi00YjMzLWI4NjMtZjU1ZDgzOTllNmRmIiwiYXBpX2RvbWFpbiI6ImFwaS1iLmFtb2NybS5ydSJ9.W6ICNBWwbuAbOtP6LQuSXn-UmWVFEVJZYXNXhppMp7KZKxMKASjdRgg2Q1kjuFyfHyEEoRb0Vg1yHi2yYchLPDIO8wCoNXnIA8hcMtFXeOKkkx2NcdlJQpZT9QLJN1zShgiOJ2SdnZhnkMH54OSN_7uxZL5C9dQZT-VqnBxHVNxJQ8Bj0r8tYgZTPQwz-tiuU_xt9jn5f-APoNMpfHkYsRTtObZBQxOPZs_vQwO77w4d3mIgI3P3MW_yntIG8wb8LLSzQwpMI0tqdt8eWhxChhKOqo5LztE1uEYEih8hgCb9jFW1d8hHbkS2xGk3oWCKSiJQX_Fwj7j3LkEdbq2l8w,
+    access_token: null,
     refresh_token: null,
     expires_at: null
 };
@@ -224,6 +224,7 @@ app.listen(PORT, () => {
     console.log(`🔑 Auth URL: https://fioparser.onrender.com/auth`);
     console.log(`📊 Status: https://fioparser.onrender.com/status`);
 });
+
 
 
 
