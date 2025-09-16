@@ -1,25 +1,4 @@
-import express from "express";
-import path from "path";
-import { fileURLToPath } from "url";
-
-const __filename = fileURLToPath(import.meta.url);
-const __dirname = path.dirname(__filename);
-
-const app = express();
-const PORT = process.env.PORT || 3000;
-
-// Отдаём статические файлы
-app.use(express.static(__dirname));
-
-// Тестовая страница
-app.get("/support", (req, res) => {
-  res.send("<h2>FIO Parser Widget Support</h2><p>Виджет работает!</p>");
-});
-
-app.listen(PORT, () => {
-  console.log(`🚀 Server running on port ${PORT}`);
-
-  const express = require('express');
+const express = require('express');
 const cors = require('cors');
 const path = require('path');
 
@@ -35,6 +14,11 @@ app.use(cors({
 
 // Обслуживание статических файлов
 app.use(express.static(path.join(__dirname)));
+
+// Основной роут
+app.get('/', (req, res) => {
+  res.send('FIOParser Server is running!');
+});
 
 // Роут для виджета
 app.get('/widget.js', (req, res) => {
@@ -52,7 +36,7 @@ app.get('/widget.html', (req, res) => {
   res.sendFile(path.join(__dirname, 'widget.html'));
 });
 
+// Запуск сервера (ТОЛЬКО ОДИН РАЗ!)
 app.listen(PORT, () => {
   console.log(`Server is running on port ${PORT}`);
-});
 });
