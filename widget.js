@@ -24,18 +24,15 @@ define(['jquery'], function($) {
     render: function() { return true; },
     contacts: {
       selected: function() {
-        var contact = AMOCRM.data.current_card.model.attributes;
+        console.log("🔔 Contact opened:", AMOCRM.data.current_card);
 
-        if (contact.name) {
+        var contact = AMOCRM.data.current_card.attributes || AMOCRM.data.current_card.model?.attributes;
+
+        if (contact?.name) {
           var parsed = parseFIO(contact.name);
-
-          if (parsed.firstName) contact.first_name = parsed.firstName;
-          if (parsed.lastName) contact.last_name = parsed.lastName;
-
-          // Если есть кастомное поле для отчества → сюда его ID
-          // contact.custom_fields[123456] = parsed.patronymic;
-
           console.log("🔎 Parsed FIO:", parsed);
+        } else {
+          console.warn("⚠️ Не удалось найти contact.name");
         }
       }
     }
