@@ -1,22 +1,12 @@
 import express from 'express';
 import cors from 'cors';
-import path from 'path';
-import { fileURLToPath } from 'url';
+import axios from 'axios';
 
 const app = express();
 const PORT = process.env.PORT || 3000;
 
-const __filename = fileURLToPath(import.meta.url);
-const __dirname = path.dirname(__filename);
-
-// Middleware
-app.use(cors({
-    origin: '*',
-    methods: ['GET', 'POST', 'PUT', 'DELETE'],
-    allowedHeaders: ['Content-Type', 'Authorization']
-}));
+app.use(cors());
 app.use(express.json());
-app.use(express.static(path.join(__dirname)));
 
 // Функция парсинга ФИО
 function parseFIO(fullName) {
@@ -27,14 +17,11 @@ function parseFIO(fullName) {
     let middleName = '';
 
     if (parts.length === 1) {
-        // Только фамилия
         lastName = parts[0];
     } else if (parts.length === 2) {
-        // Фамилия и имя
         lastName = parts[0];
         firstName = parts[1];
     } else if (parts.length >= 3) {
-        // Фамилия, имя и отчество
         lastName = parts[0];
         firstName = parts[1];
         middleName = parts.slice(2).join(' ');
@@ -43,35 +30,60 @@ function parseFIO(fullName) {
     return { lastName, firstName, middleName };
 }
 
-// Routes
-app.get('/', (req, res) => {
-    res.send('FIOParser Server is running!');
-});
-
-app.get('/widget.js', (req, res) => {
-    res.setHeader('Content-Type', 'application/javascript');
-    res.sendFile(path.join(__dirname, 'widget.js'));
-});
-
-app.post('/api/parse', (req, res) => {
+// Вебхук для обработки новых контактов
+app.post('/webhook/contact', async (req, res) => {
     try {
-        const { fullName } = req.body;
+        const { contact, account } = req.body;
         
-        if (!fullName || typeof fullName !== 'string') {
-            return res.status(400).json({ error: 'Full name is required' });
+        if (!contact || !contact.name) {
+            return res.status(400).json({ error: 'No contact data' });
         }
 
-        const parsed = parseFIO(fullName);
-        res.json({
-            success: true,
-            data: parsed
-        });
+        console.log('Processing contact:', contact.name);
+
+        // Парсим ФИО
+        const parsed = parseFIO(contact.name);
+        
+        // Обновляем контакт в amoCRM
+        await updateContactInAmoCRM(account, contact.id, parsed);
+        
+        res.json({ success: true, parsed });
     } catch (error) {
+        console.error('Webhook error:', error);
         res.status(500).json({ error: error.message });
     }
 });
 
+// Функция обновления контакта через API
+async function updateContactInAmoCRM(account, contactId, parsedData) {
+    const apiUrl = `https://${account}.amocrm.ru/api/v4/contacts/${contactId}`;
+    
+    const updateData = {
+        first_name: parsedData.firstName,
+        last_name: parsedData.lastName,
+        custom_fields_values: [
+            {
+                field_id: 123456, // ID поля "Отчество"
+                values: [{ value: parsedData.middleName }]
+            }
+        ]
+    };
+
+    // Здесь нужен access_token из OAuth
+    // Для демонстрации просто логируем
+    console.log('Would update contact:', updateData);
+    return true;
+}
+
+// UI для управления (опционально)
+app.get('/admin', (req, res) => {
+    res.send(`
+        <h1>FIOParser Admin</h1>
+        <p>Статус: Активен</p>
+        <p>Обработано контактов: 0</p>
+    `);
+});
+
 app.listen(PORT, () => {
-    console.log(`🚀 Server running on port ${PORT}`);
-    console.log(`📋 Widget: https://fioparser.onrender.com/widget.html`);
+    console.log(`🚀 Auto-parser server running on port ${PORT}`);
 });
