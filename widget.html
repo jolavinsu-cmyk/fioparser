@@ -1,4 +1,24 @@
-<div style="padding:10px;">
-  <h3>FIO Parser</h3>
-  <p>Виджет активен. ФИО будет разбираться при открытии карточки.</p>
-</div>
+<!DOCTYPE html>
+<html>
+<head>
+    <meta charset="utf-8">
+    <title>FIOParser Widget</title>
+    <style>
+        body { font-family: Arial, sans-serif; padding: 10px; }
+        .widget-container { max-width: 300px; }
+    </style>
+</head>
+<body>
+    <div class="widget-container">
+        <h3>FIOParser</h3>
+        <p>Виджет для парсинга ФИО</p>
+    </div>
+    
+    <script>
+        // Базовая интеграция с amoCRM API
+        window.addEventListener('amoready', function() {
+            console.log('FIOParser widget loaded in amoCRM');
+        });
+    </script>
+</body>
+</html>
