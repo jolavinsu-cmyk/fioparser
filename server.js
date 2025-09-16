@@ -6,42 +6,72 @@ import { fileURLToPath } from 'url';
 const app = express();
 const PORT = process.env.PORT || 3000;
 
-// Получаем __dirname для ES модулей
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 
-// Включение CORS
+// Middleware
 app.use(cors({
-  origin: '*',
-  methods: ['GET', 'POST', 'PUT', 'DELETE'],
-  allowedHeaders: ['Content-Type', 'Authorization']
+    origin: '*',
+    methods: ['GET', 'POST', 'PUT', 'DELETE'],
+    allowedHeaders: ['Content-Type', 'Authorization']
 }));
-
-// Обслуживание статических файлов
+app.use(express.json());
 app.use(express.static(path.join(__dirname)));
 
-// Основной роут
+// Функция парсинга ФИО
+function parseFIO(fullName) {
+    const parts = fullName.trim().split(/\s+/).filter(part => part.length > 0);
+    
+    let lastName = '';
+    let firstName = '';
+    let middleName = '';
+
+    if (parts.length === 1) {
+        // Только фамилия
+        lastName = parts[0];
+    } else if (parts.length === 2) {
+        // Фамилия и имя
+        lastName = parts[0];
+        firstName = parts[1];
+    } else if (parts.length >= 3) {
+        // Фамилия, имя и отчество
+        lastName = parts[0];
+        firstName = parts[1];
+        middleName = parts.slice(2).join(' ');
+    }
+
+    return { lastName, firstName, middleName };
+}
+
+// Routes
 app.get('/', (req, res) => {
-  res.send('FIOParser Server is running!');
+    res.send('FIOParser Server is running!');
 });
 
-// Роут для виджета
 app.get('/widget.js', (req, res) => {
-  res.sendFile(path.join(__dirname, 'widget.js'));
+    res.setHeader('Content-Type', 'application/javascript');
+    res.sendFile(path.join(__dirname, 'widget.js'));
 });
 
-// Роут для manifest.json
-app.get('/manifest.json', (req, res) => {
-  res.setHeader('Content-Type', 'application/json');
-  res.sendFile(path.join(__dirname, 'manifest.json'));
+app.post('/api/parse', (req, res) => {
+    try {
+        const { fullName } = req.body;
+        
+        if (!fullName || typeof fullName !== 'string') {
+            return res.status(400).json({ error: 'Full name is required' });
+        }
+
+        const parsed = parseFIO(fullName);
+        res.json({
+            success: true,
+            data: parsed
+        });
+    } catch (error) {
+        res.status(500).json({ error: error.message });
+    }
 });
 
-// Роут для widget.html
-app.get('/widget.html', (req, res) => {
-  res.sendFile(path.join(__dirname, 'widget.html'));
-});
-
-// Запуск сервера
 app.listen(PORT, () => {
-  console.log(`Server is running on port ${PORT}`);
+    console.log(`🚀 Server running on port ${PORT}`);
+    console.log(`📋 Widget: https://fioparser.onrender.com/widget.html`);
 });
