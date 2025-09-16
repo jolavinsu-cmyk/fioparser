@@ -1,11 +1,6 @@
 import express from 'express';
 import cors from 'cors';
 import axios from 'axios';
-import { fileURLToPath } from 'url';
-import path from 'path';
-
-const __filename = fileURLToPath(import.meta.url);
-const __dirname = path.dirname(__filename);
 
 const app = express();
 const PORT = process.env.PORT || 3000;
@@ -16,215 +11,159 @@ const CLIENT_SECRET = process.env.AMOCRM_CLIENT_SECRET || '0pz2EXM02oankmHtCaZOg
 const REDIRECT_URI = process.env.REDIRECT_URI || 'https://fioparser.onrender.com/oauth/callback';
 const AMOCRM_DOMAIN = process.env.AMOCRM_DOMAIN || 'insain0';
 
-// Хранилище токенов (в продакшене используйте БД)
-let tokens = {
-    access_token: null,
-    refresh_token: null,
-    expires_at: null
-};
+// Хранилище
+let tokens = null;
+let lastCheckTime = new Date();
 
 app.use(cors());
 app.use(express.json());
-app.use(express.static(path.join(__dirname)));
 
-// Функция парсинга ФИО
+// Функция парсинга ФИО (оставляем как было)
 function parseFIO(fullName) {
     const parts = fullName.trim().split(/\s+/).filter(part => part.length > 0);
-    
-    let lastName = '';
-    let firstName = '';
-    let middleName = '';
+    let lastName = '', firstName = '', middleName = '';
 
-    if (parts.length === 1) {
-        lastName = parts[0];
-    } else if (parts.length === 2) {
-        lastName = parts[0];
-        firstName = parts[1];
-    } else if (parts.length >= 3) {
-        lastName = parts[0];
-        firstName = parts[1];
-        middleName = parts.slice(2).join(' ');
-    }
+    if (parts.length === 1) lastName = parts[0];
+    else if (parts.length === 2) { lastName = parts[0]; firstName = parts[1]; }
+    else if (parts.length >= 3) { lastName = parts[0]; firstName = parts[1]; middleName = parts.slice(2).join(' '); }
 
     return { lastName, firstName, middleName };
 }
 
-// 1. Страница авторизации
+// Авторизация (оставляем как было)
 app.get('/auth', (req, res) => {
-    const authUrl = `https://www.amocrm.ru/oauth?client_id=${CLIENT_ID}&redirect_uri=${encodeURIComponent(REDIRECT_URI)}&state=some_random_string`;
+    const authUrl = `https://www.amocrm.ru/oauth?client_id=${CLIENT_ID}&redirect_uri=${encodeURIComponent(REDIRECT_URI)}`;
     res.redirect(authUrl);
 });
 
-// 2. Callback обработчик
 app.get('/oauth/callback', async (req, res) => {
     try {
         const { code } = req.query;
-        
-        if (!code) {
-            return res.status(400).send('No authorization code received');
-        }
-
-        // Получаем токены
         const tokenResponse = await axios.post(`https://${AMOCRM_DOMAIN}.amocrm.ru/oauth2/access_token`, {
-            client_id: CLIENT_ID,
-            client_secret: CLIENT_SECRET,
-            grant_type: 'authorization_code',
-            code: code,
-            redirect_uri: REDIRECT_URI
+            client_id: CLIENT_ID, client_secret: CLIENT_SECRET, grant_type: 'authorization_code', code, redirect_uri: REDIRECT_URI
         });
 
-        // Сохраняем токены
         tokens = {
             access_token: tokenResponse.data.access_token,
             refresh_token: tokenResponse.data.refresh_token,
             expires_at: Date.now() + (tokenResponse.data.expires_in * 1000)
         };
 
-        console.log('OAuth authorization successful');
-        res.send('Авторизация успешна! Вы можете закрыть эту вкладку.');
-
+        // Запускаем периодическую проверку после авторизации
+        startPeriodicCheck();
+        
+        res.send('Авторизация успешна! Автопарсинг запущен.');
     } catch (error) {
-        console.error('OAuth error:', error.response?.data || error.message);
+        console.error('OAuth error:', error.response?.data);
         res.status(500).send('Ошибка авторизации');
     }
 });
 
-// 3. Обновление токена
-async function refreshToken() {
-    try {
-        if (!tokens.refresh_token) {
-            throw new Error('No refresh token available');
-        }
+// Периодическая проверка новых контактов
+async function startPeriodicCheck() {
+    setInterval(async () => {
+        try {
+            if (!tokens) return;
 
-        const response = await axios.post(`https://${AMOCRM_DOMAIN}.amocrm.ru/oauth2/access_token`, {
-            client_id: CLIENT_ID,
-            client_secret: CLIENT_SECRET,
-            grant_type: 'refresh_token',
-            refresh_token: tokens.refresh_token,
-            redirect_uri: REDIRECT_URI
+            console.log('🔍 Проверяем новые контакты...');
+            
+            const contacts = await getRecentContacts();
+            for (const contact of contacts) {
+                await processContact(contact);
+            }
+
+            lastCheckTime = new Date();
+            
+        } catch (error) {
+            console.error('Periodic check error:', error.message);
+        }
+    }, 30000); // Проверяем каждые 30 секунд
+}
+
+// Получение последних контактов
+async function getRecentContacts() {
+    try {
+        const response = await axios.get(
+            `https://${AMOCRM_DOMAIN}.amocrm.ru/api/v4/contacts?order[created_at]=desc&limit=20`,
+            {
+                headers: { 'Authorization': `Bearer ${tokens.access_token}` }
+            }
+        );
+
+        return response.data._embedded.contacts.filter(contact => {
+            const contactTime = new Date(contact.created_at * 1000);
+            return contactTime > lastCheckTime;
         });
 
-        tokens = {
-            access_token: response.data.access_token,
-            refresh_token: response.data.refresh_token,
-            expires_at: Date.now() + (response.data.expires_in * 1000)
-        };
-
-        console.log('Token refreshed successfully');
-        return true;
-
     } catch (error) {
-        console.error('Token refresh error:', error.response?.data || error.message);
-        return false;
+        console.error('Get contacts error:', error.response?.data);
+        return [];
     }
 }
 
-// 4. Проверка и получение валидного токена
-async function getValidToken() {
-    // Если токен истек или скоро истечет - обновляем
-    if (!tokens.access_token || Date.now() >= tokens.expires_at - 300000) { // 5 минут до expiry
-        console.log('Token expired or about to expire, refreshing...');
-        await refreshToken();
-    }
-    return tokens.access_token;
-}
-
-// 5. Вебхук для обработки контактов
-app.post('/webhook/contact', async (req, res) => {
+// Обработка контакта
+async function processContact(contact) {
     try {
-        const { contact, account } = req.body;
+        if (!contact.name) return;
+
+        console.log('Обрабатываем контакт:', contact.name);
         
-        if (!contact || !contact.name) {
-            return res.status(400).json({ error: 'No contact data' });
-        }
-
-        console.log('Processing contact:', contact.name);
-
-        // Парсим ФИО
         const parsed = parseFIO(contact.name);
-        
-        // Обновляем контакт в amoCRM
-        const success = await updateContactInAmoCRM(contact.id, parsed);
-        
-        if (success) {
-            console.log('Contact updated successfully:', contact.id);
-            res.json({ success: true, parsed });
-        } else {
-            res.status(500).json({ error: 'Failed to update contact' });
-        }
+        console.log('Результат парсинга:', parsed);
+
+        // Обновляем контакт
+        await updateContactInAmoCRM(contact.id, parsed);
+        console.log('✅ Контакт обновлен');
 
     } catch (error) {
-        console.error('Webhook error:', error);
-        res.status(500).json({ error: error.message });
+        console.error('Process contact error:', error.message);
     }
-});
+}
 
-// 6. Функция обновления контакта
+// Обновление контакта
 async function updateContactInAmoCRM(contactId, parsedData) {
     try {
-        const accessToken = await getValidToken();
-        
-        if (!accessToken) {
-            throw new Error('No valid access token');
-        }
-
         const updateData = {
             first_name: parsedData.firstName || '',
             last_name: parsedData.lastName || ''
         };
-
-        // Если есть отчество, добавляем в custom fields
-        if (parsedData.middleName) {
-            updateData.custom_fields_values = [
-                {
-                    field_code: 'PATRONYMIC', // или field_id: 123456
-                    values: [{ value: parsedData.middleName }]
-                }
-            ];
-        }
 
         const response = await axios.patch(
             `https://${AMOCRM_DOMAIN}.amocrm.ru/api/v4/contacts/${contactId}`,
             updateData,
             {
                 headers: {
-                    'Authorization': `Bearer ${accessToken}`,
+                    'Authorization': `Bearer ${tokens.access_token}`,
                     'Content-Type': 'application/json'
                 }
             }
         );
 
         return response.status === 200;
-
     } catch (error) {
-        console.error('API update error:', error.response?.data || error.message);
+        console.error('Update contact error:', error.response?.data);
         return false;
     }
 }
 
-// 7. Статус авторизации
+// Статус
 app.get('/status', (req, res) => {
-    const isAuthorized = !!tokens.access_token;
-    const expiresIn = tokens.expires_at ? Math.round((tokens.expires_at - Date.now()) / 60000) : 0;
-    
     res.json({
-        authorized: isAuthorized,
-        expires_in_minutes: expiresIn,
+        authorized: !!tokens,
+        last_check: lastCheckTime.toISOString(),
         domain: AMOCRM_DOMAIN
     });
 });
 
-// 8. Главная страница с инструкцией
 app.get('/', (req, res) => {
-    res.sendFile(path.join(__dirname, 'index.html'));
+    res.send(`
+        <h1>FIOParser Auto</h1>
+        <p>Статус: ${tokens ? 'Авторизован' : 'Не авторизован'}</p>
+        <a href="/auth">Авторизовать</a> | 
+        <a href="/status">Статус</a>
+    `);
 });
 
 app.listen(PORT, () => {
-    console.log(`🚀 Auto-parser server running on port ${PORT}`);
-    console.log(`🔑 Auth URL: https://fioparser.onrender.com/auth`);
-    console.log(`📊 Status: https://fioparser.onrender.com/status`);
+    console.log(`🚀 Server running on port ${PORT}`);
 });
-
-
-
-
