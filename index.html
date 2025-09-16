@@ -1,0 +1,73 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <meta charset="utf-8">
+    <title>FIOParser Auto - Настройка</title>
+    <style>
+        body { font-family: Arial, sans-serif; max-width: 800px; margin: 40px auto; padding: 20px; }
+        .step { background: #f8f9fa; padding: 20px; margin: 20px 0; border-radius: 8px; }
+        .code { background: #333; color: white; padding: 10px; border-radius: 4px; font-family: monospace; }
+        .btn { background: #1565c0; color: white; padding: 10px 20px; text-decoration: none; border-radius: 4px; display: inline-block; margin: 10px 0; }
+        .status { padding: 10px; border-radius: 5px; margin: 10px 0; }
+        .success { background: #d4edda; color: #155724; }
+        .error { background: #f8d7da; color: #721c24; }
+    </style>
+</head>
+<body>
+    <h1>🔍 FIOParser Auto - Настройка</h1>
+    
+    <div class="step">
+        <h2>1. Создайте интеграцию в amoCRM</h2>
+        <p>Зайдите в <strong>Настройки → API → Интеграции</strong></p>
+        <p>Создайте новую интеграцию с правами:</p>
+        <ul>
+            <li>contacts: write</li>
+            <li>contacts: delete</li>
+        </ul>
+    </div>
+
+    <div class="step">
+        <h2>2. Настройте переменные окружения на Render</h2>
+        <div class="code">
+            AMOCRM_CLIENT_ID=your_client_id<br>
+            AMOCRM_CLIENT_SECRET=your_client_secret<br>
+            AMOCRM_DOMAIN=yourdomain<br>
+            REDIRECT_URI=https://fioparser.onrender.com/oauth/callback
+        </div>
+    </div>
+
+    <div class="step">
+        <h2>3. Авторизуйте приложение</h2>
+        <a href="/auth" class="btn">🔑 Авторизовать в amoCRM</a>
+    </div>
+
+    <div class="step">
+        <h2>4. Настройте вебхуки в amoCRM</h2>
+        <p>Добавьте вебхук на события:</p>
+        <div class="code">
+            URL: https://fioparser.onrender.com/webhook/contact<br>
+            События: contact.add, contact.update
+        </div>
+    </div>
+
+    <div class="step">
+        <h2>5. Проверьте статус</h2>
+        <a href="/status" class="btn">📊 Проверить статус авторизации</a>
+    </div>
+
+    <script>
+        // Проверка статуса при загрузке
+        fetch('/status')
+            .then(response => response.json())
+            .then(data => {
+                const statusDiv = document.createElement('div');
+                statusDiv.className = `status ${data.authorized ? 'success' : 'error'}`;
+                statusDiv.innerHTML = data.authorized ? 
+                    '✅ Авторизация активна' : 
+                    '❌ Требуется авторизация';
+                document.body.prepend(statusDiv);
+            })
+            .catch(error => console.error('Status check failed:', error));
+    </script>
+</body>
+</html>
