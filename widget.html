@@ -2,50 +2,54 @@
 <html>
 <head>
     <meta charset="utf-8">
-    <title>FIOParser Widget</title>
-    <link rel="stylesheet" href="style.css">
+    <title>FIOParser Auto - Настройка</title>
+    <style>
+        body { font-family: Arial, sans-serif; max-width: 800px; margin: 40px auto; padding: 20px; }
+        .step { background: #f8f9fa; padding: 20px; margin: 20px 0; border-radius: 8px; }
+        .code { background: #333; color: white; padding: 10px; border-radius: 4px; }
+        .btn { background: #1565c0; color: white; padding: 10px 20px; text-decoration: none; border-radius: 4px; }
+    </style>
 </head>
 <body>
-    <div class="fioparser-widget">
-        <div class="widget-header">
-            <h3>🔍 Парсер ФИО</h3>
-            <button class="close-btn" onclick="hideWidget()">×</button>
-        </div>
-        
-        <div class="widget-content">
-            <div class="input-group">
-                <label>Полное ФИО из контакта:</label>
-                <input type="text" id="fullNameInput" placeholder="Иванов Иван Иванович">
-            </div>
-            
-            <div class="preview">
-                <h4>Результат парсинга:</h4>
-                <div class="result-line">
-                    <span class="label">Фамилия:</span>
-                    <span id="lastNameResult" class="value">-</span>
-                </div>
-                <div class="result-line">
-                    <span class="label">Имя:</span>
-                    <span id="firstNameResult" class="value">-</span>
-                </div>
-                <div class="result-line">
-                    <span class="label">Отчество:</span>
-                    <span id="middleNameResult" class="value">-</span>
-                </div>
-            </div>
-            
-            <button class="parse-btn" onclick="parseCurrentContact()">
-                📝 Распарсить текущий контакт
-            </button>
-            
-            <button class="apply-btn" onclick="applyToCRM()">
-                💾 Применить к amoCRM
-            </button>
-            
-            <div id="statusMessage" class="status-message"></div>
+    <h1>🔍 FIOParser Auto - Настройка</h1>
+    
+    <div class="step">
+        <h2>1. Создайте интеграцию в amoCRM</h2>
+        <p>Зайдите в <strong>Настройки → API → Интеграции</strong></p>
+        <p>Создайте новую интеграцию с правами:</p>
+        <ul>
+            <li>contacts: write</li>
+            <li>contacts: delete</li>
+        </ul>
+    </div>
+
+    <div class="step">
+        <h2>2. Настройте переменные окружения на Render</h2>
+        <div class="code">
+            AMOCRM_CLIENT_ID=your_client_id<br>
+            AMOCRM_CLIENT_SECRET=your_client_secret<br>
+            AMOCRM_DOMAIN=yourdomain<br>
+            REDIRECT_URI=https://fioparser.onrender.com/oauth/callback
         </div>
     </div>
 
-    <script src="widget.js"></script>
+    <div class="step">
+        <h2>3. Авторизуйте приложение</h2>
+        <a href="/auth" class="btn">🔑 Авторизовать в amoCRM</a>
+    </div>
+
+    <div class="step">
+        <h2>4. Настройте вебхуки в amoCRM</h2>
+        <p>Добавьте вебхук на события:</p>
+        <div class="code">
+            URL: https://fioparser.onrender.com/webhook/contact<br>
+            События: contact.add, contact.update
+        </div>
+    </div>
+
+    <div class="step">
+        <h2>5. Проверьте статус</h2>
+        <a href="/status" class="btn">📊 Проверить статус авторизации</a>
+    </div>
 </body>
 </html>
