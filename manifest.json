@@ -1,0 +1,14 @@
+{
+  "widget": {
+    "name": "FIO Parser",
+    "short_description": "Парсер ФИО",
+    "description": "Автоматически разбирает ФИО и раскладывает по полям",
+    "version": "1.0.0",
+    "interface_version": 2,
+    "init": "https://YOUR-RENDER-APP.onrender.com/widget.js",
+    "location": ["contacts"],
+    "support": {
+      "link": "https://YOUR-RENDER-APP.onrender.com/support"
+    }
+  }
+}
