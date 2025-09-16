@@ -1,0 +1,14 @@
+{
+  "name": "FIOParser",
+  "description": "Виджет для автоматического парсинга ФИО в amoCRM",
+  "version": "1.0",
+  "manifest_url": "https://fioparser.onrender.com/manifest.json",
+  "widget": {
+    "name": "FIOParser",
+    "short_description": "Парсер ФИО",
+    "description": "Автоматически разделяет ФИО на фамилию, имя и отчество",
+    "icon": "https://fioparser.onrender.com/icon.png",
+    "url": "https://fioparser.onrender.com/widget.html",
+    "version": "1.0"
+  }
+}

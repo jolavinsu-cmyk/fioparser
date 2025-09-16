@@ -1,0 +1,51 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <meta charset="utf-8">
+    <title>FIOParser Widget</title>
+    <link rel="stylesheet" href="style.css">
+</head>
+<body>
+    <div class="fioparser-widget">
+        <div class="widget-header">
+            <h3>🔍 Парсер ФИО</h3>
+            <button class="close-btn" onclick="hideWidget()">×</button>
+        </div>
+        
+        <div class="widget-content">
+            <div class="input-group">
+                <label>Полное ФИО из контакта:</label>
+                <input type="text" id="fullNameInput" placeholder="Иванов Иван Иванович">
+            </div>
+            
+            <div class="preview">
+                <h4>Результат парсинга:</h4>
+                <div class="result-line">
+                    <span class="label">Фамилия:</span>
+                    <span id="lastNameResult" class="value">-</span>
+                </div>
+                <div class="result-line">
+                    <span class="label">Имя:</span>
+                    <span id="firstNameResult" class="value">-</span>
+                </div>
+                <div class="result-line">
+                    <span class="label">Отчество:</span>
+                    <span id="middleNameResult" class="value">-</span>
+                </div>
+            </div>
+            
+            <button class="parse-btn" onclick="parseCurrentContact()">
+                📝 Распарсить текущий контакт
+            </button>
+            
+            <button class="apply-btn" onclick="applyToCRM()">
+                💾 Применить к amoCRM
+            </button>
+            
+            <div id="statusMessage" class="status-message"></div>
+        </div>
+    </div>
+
+    <script src="widget.js"></script>
+</body>
+</html>
