@@ -8,8 +8,9 @@
     "init": "https://fioparser.onrender.com/widget.js",
     "location": ["contacts"],
     "support": {
-      "link": "https://YOUR-RENDER-APP.onrender.com/support"
+      "link": "https://fioparser.onrender.com/support"
     }
   }
 
 }
+
