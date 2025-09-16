@@ -11,10 +11,10 @@ const app = express();
 const PORT = process.env.PORT || 3000;
 
 // Конфигурация OAuth (замените на свои данные)
-const CLIENT_ID = process.env.AMOCRM_CLIENT_ID || 'your_client_id';
-const CLIENT_SECRET = process.env.AMOCRM_CLIENT_SECRET || 'your_client_secret';
+const CLIENT_ID = process.env.AMOCRM_CLIENT_ID || 'd30b21ee-878a-4fe4-9434-ccc2a12b22fd';
+const CLIENT_SECRET = process.env.AMOCRM_CLIENT_SECRET || '0pz2EXM02oankmHtCaZOgFa3rESLXT6F282gVIozREZLHuuYzVyNAFtyYDXMNd2u';
 const REDIRECT_URI = process.env.REDIRECT_URI || 'https://fioparser.onrender.com/oauth/callback';
-const AMOCRM_DOMAIN = process.env.AMOCRM_DOMAIN || 'yourdomain';
+const AMOCRM_DOMAIN = process.env.AMOCRM_DOMAIN || 'insain0';
 
 // Хранилище токенов (в продакшене используйте БД)
 let tokens = {
@@ -224,3 +224,4 @@ app.listen(PORT, () => {
     console.log(`🔑 Auth URL: https://fioparser.onrender.com/auth`);
     console.log(`📊 Status: https://fioparser.onrender.com/status`);
 });
+
