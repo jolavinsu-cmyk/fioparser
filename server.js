@@ -1,9 +1,14 @@
-const express = require('express');
-const cors = require('cors');
-const path = require('path');
+import express from 'express';
+import cors from 'cors';
+import path from 'path';
+import { fileURLToPath } from 'url';
 
 const app = express();
 const PORT = process.env.PORT || 3000;
+
+// Получаем __dirname для ES модулей
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = path.dirname(__filename);
 
 // Включение CORS
 app.use(cors({
@@ -36,7 +41,7 @@ app.get('/widget.html', (req, res) => {
   res.sendFile(path.join(__dirname, 'widget.html'));
 });
 
-// Запуск сервера (ТОЛЬКО ОДИН РАЗ!)
+// Запуск сервера
 app.listen(PORT, () => {
   console.log(`Server is running on port ${PORT}`);
 });
