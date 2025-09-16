@@ -21,20 +21,27 @@ define(['jquery'], function($) {
       return true;
     },
     bind_actions: function() { return true; },
-    render: function() { return true; },
-    contacts: {
-      selected: function() {
-        console.log("🔔 Contact opened:", AMOCRM.data.current_card);
+    render: function() {
+      console.log("🎯 Render вызван", this);
 
-        var contact = AMOCRM.data.current_card.attributes || AMOCRM.data.current_card.model?.attributes;
+      try {
+        let entity = this.system().area; // контакт / сделка / компания
+        console.log("📌 Открыта карточка:", entity);
 
-        if (contact?.name) {
-          var parsed = parseFIO(contact.name);
-          console.log("🔎 Parsed FIO:", parsed);
-        } else {
-          console.warn("⚠️ Не удалось найти contact.name");
+        if (entity === "contacts") {
+          let name = this.params().name || "";
+          console.log("👤 Имя контакта:", name);
+
+          if (name) {
+            let parsed = parseFIO(name);
+            console.log("🔎 Parsed FIO:", parsed);
+          }
         }
+      } catch (e) {
+        console.error("❌ Ошибка в render:", e);
       }
+
+      return true;
     }
   };
 });
