@@ -4,6 +4,7 @@ import axios from 'axios';
 
 const app = express();
 const PORT = process.env.PORT || 3000;
+let lastCheckTime = new Date(Date.now() - 5 * 60 * 1000); // 5 минут назад
 
 // Конфигурация OAuth (замените на свои данные)
 const CLIENT_ID = process.env.AMOCRM_CLIENT_ID || 'd30b21ee-878a-4fe4-9434-ccc2a12b22fd';
@@ -63,64 +64,109 @@ app.get('/oauth/callback', async (req, res) => {
 async function startPeriodicCheck() {
     setInterval(async () => {
         try {
-            if (!tokens) return;
+            if (!tokens) {
+                console.log('⏳ Waiting for authorization...');
+                return;
+            }
 
-            console.log('🔍 Проверяем новые контакты...');
+            console.log('\n🔍 === STARTING PERIODIC CHECK ===');
+            console.log('🕐 Last check was:', lastCheckTime.toISOString());
             
             const contacts = await getRecentContacts();
+            console.log(`📋 Found ${contacts.length} contacts to process`);
+            
             for (const contact of contacts) {
                 await processContact(contact);
             }
 
-            lastCheckTime = new Date();
-            
+            lastCheckTime = new Date(); // ОБНОВЛЯЕМ ВРЕМЯ ПОСЛЕ ПРОВЕРКИ
+            console.log('✅ Check completed. New last check time:', lastCheckTime.toISOString());
+
         } catch (error) {
-            console.error('Periodic check error:', error.message);
+            console.error('💥 Periodic check error:', error.message);
         }
-    }, 30000); // Проверяем каждые 30 секунд
+    }, 30000);
 }
 
-// Получение последних контактов
+// Получение последних контактов (ИСПРАВЛЕННАЯ ВЕРСИЯ)
 async function getRecentContacts() {
     try {
+        console.log('🕐 Last check time:', lastCheckTime.toISOString());
+        
         const response = await axios.get(
-            `https://${AMOCRM_DOMAIN}.amocrm.ru/api/v4/contacts?order[created_at]=desc&limit=20`,
+            `https://${AMOCRM_DOMAIN}.amocrm.ru/api/v4/contacts?order[created_at]=desc&limit=50`,
             {
-                headers: { 'Authorization': `Bearer ${tokens.access_token}` }
+                headers: { 
+                    'Authorization': `Bearer ${tokens.access_token}`,
+                    'Content-Type': 'application/json'
+                }
             }
         );
 
-        return response.data._embedded.contacts.filter(contact => {
+        if (!response.data._embedded || !response.data._embedded.contacts) {
+            console.log('❌ No contacts found in response');
+            return [];
+        }
+
+        const newContacts = response.data._embedded.contacts.filter(contact => {
+            if (!contact.created_at) return false;
+            
+            // amoCRM возвращает timestamp в секундах, а не миллисекундах!
             const contactTime = new Date(contact.created_at * 1000);
-            return contactTime > lastCheckTime;
+            const isNew = contactTime > lastCheckTime;
+            
+            if (isNew) {
+                console.log('🎯 New contact found:', contact.name, 'at', contactTime.toISOString());
+            }
+            
+            return isNew;
         });
 
+        console.log(`📊 Found ${newContacts.length} new contacts`);
+        return newContacts;
+
     } catch (error) {
-        console.error('Get contacts error:', error.response?.data);
+        console.error('❌ Get contacts error:', error.response?.data || error.message);
         return [];
     }
 }
-
-// Обработка контакта
+// Обработка контакта (С УЛУЧШЕННЫМ ЛОГИРОВАНИЕМ)
 async function processContact(contact) {
     try {
-        if (!contact.name) return;
-
-        console.log('Обрабатываем контакт:', contact.name);
+        console.log('=== PROCESSING CONTACT ===');
+        console.log('Contact ID:', contact.id);
+        console.log('Original name:', contact.name);
         
+        if (!contact.name || contact.name.trim().length < 2) {
+            console.log('❌ Skip: No valid name');
+            return;
+        }
+
         const parsed = parseFIO(contact.name);
-        console.log('Результат парсинга:', parsed);
+        console.log('Parsed result:', parsed);
+
+        // Проверяем, нужно ли вообще обновлять
+        const needsUpdate = parsed.lastName || parsed.firstName;
+        if (!needsUpdate) {
+            console.log('⚠️ Skip: Nothing to update');
+            return;
+        }
 
         // Обновляем контакт
-        await updateContactInAmoCRM(contact.id, parsed);
-        console.log('✅ Контакт обновлен');
+        const success = await updateContactInAmoCRM(contact.id, parsed);
+        
+        if (success) {
+            console.log('✅ Contact updated successfully');
+        } else {
+            console.log('❌ Failed to update contact');
+        }
 
     } catch (error) {
-        console.error('Process contact error:', error.message);
+        console.error('💥 Process contact error:', error.message);
     }
 }
 
-// Обновление контакта
+// Обновление контакта (С УЛУЧШЕННОЙ ОБРАБОТКОЙ ОШИБОК)
 async function updateContactInAmoCRM(contactId, parsedData) {
     try {
         const updateData = {
@@ -128,20 +174,31 @@ async function updateContactInAmoCRM(contactId, parsedData) {
             last_name: parsedData.lastName || ''
         };
 
+        console.log('Updating contact with:', updateData);
+
         const response = await axios.patch(
             `https://${AMOCRM_DOMAIN}.amocrm.ru/api/v4/contacts/${contactId}`,
             updateData,
             {
                 headers: {
                     'Authorization': `Bearer ${tokens.access_token}`,
-                    'Content-Type': 'application/json'
-                }
+                    'Content-Type': 'application/json',
+                    'Accept': 'application/json'
+                },
+                timeout: 10000
             }
         );
 
+        console.log('Update response status:', response.status);
         return response.status === 200;
+
     } catch (error) {
-        console.error('Update contact error:', error.response?.data);
+        if (error.response) {
+            console.error('❌ API Error:', error.response.status);
+            console.error('❌ API Response:', error.response.data);
+        } else {
+            console.error('❌ Network Error:', error.message);
+        }
         return false;
     }
 }
@@ -167,3 +224,4 @@ app.get('/', (req, res) => {
 app.listen(PORT, () => {
     console.log(`🚀 Server running on port ${PORT}`);
 });
+
