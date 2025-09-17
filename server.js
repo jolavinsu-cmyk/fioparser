@@ -22,6 +22,9 @@ app.use(express.json());
 function parseFIO(fullName) {
     const parts = fullName.trim().split(/\s+/).filter(part => part.length > 0);
     
+    // Русские фамильные окончания (более полный список)
+    const surnameEndings = ['ов', 'ев', 'ин', 'ын', 'ский', 'цкий', 'ой', 'ая', 'яя', 'ич', 'ова', 'ева', 'ина', 'ына'];
+    
     let lastName = '';
     let firstName = '';
     let middleName = '';
@@ -30,26 +33,75 @@ function parseFIO(fullName) {
         // Только одно слово - считаем фамилией
         lastName = parts[0];
     } else if (parts.length === 2) {
-        // Два слова: первое - имя, второе - фамилия
-        firstName = parts[0];
-        lastName = parts[1];
+        // Два слова: определяем где фамилия по окончанию
+        const firstIsSurname = surnameEndings.some(ending => parts[0].toLowerCase().endsWith(ending));
+        const secondIsSurname = surnameEndings.some(ending => parts[1].toLowerCase().endsWith(ending));
+        
+        if (secondIsSurname && !firstIsSurname) {
+            // Второе слово похоже на фамилию, первое - на имя
+            firstName = parts[0];
+            lastName = parts[1];
+        } else if (firstIsSurname && !secondIsSurname) {
+            // Первое слово похоже на фамилию, второе - на имя
+            lastName = parts[0];
+            firstName = parts[1];
+        } else {
+            // Непонятно - используем стандартное правило: первое имя, второе фамилия
+            firstName = parts[0];
+            lastName = parts[1];
+        }
     } else if (parts.length >= 3) {
-        // Три и более слов: 
-        // Последнее слово - фамилия
-        // Первое слово - имя
-        // Все остальные между - отчество
-        lastName = parts[parts.length - 1]; // Последнее слово - фамилия
-        firstName = parts[0]; // Первое слово - имя
-        middleName = parts.slice(1, parts.length - 1).join(' '); // Все между - отчество
+        // Три и более слов: ищем фамилию по окончаниям
+        let surnameIndex = -1;
+        
+        // Сначала проверяем последнее слово (чаще всего фамилия в конце)
+        if (surnameEndings.some(ending => parts[parts.length - 1].toLowerCase().endsWith(ending))) {
+            surnameIndex = parts.length - 1;
+        }
+        // Если последнее не похоже на фамилию, проверяем первое
+        else if (surnameEndings.some(ending => parts[0].toLowerCase().endsWith(ending))) {
+            surnameIndex = 0;
+        }
+        // Если и первое не похоже, проверяем все слова
+        else {
+            for (let i = 0; i < parts.length; i++) {
+                if (surnameEndings.some(ending => parts[i].toLowerCase().endsWith(ending))) {
+                    surnameIndex = i;
+                    break;
+                }
+            }
+        }
+        
+        // Если нашли фамилию
+        if (surnameIndex !== -1) {
+            lastName = parts[surnameIndex];
+            // Все что до фамилии - имя и отчество
+            const beforeSurname = parts.slice(0, surnameIndex);
+            // Все что после фамилии - дополнительное отчество
+            const afterSurname = parts.slice(surnameIndex + 1);
+            
+            firstName = beforeSurname.join(' ');
+            middleName = afterSurname.join(' ');
+        } else {
+            // Не смогли определить фамилию - используем эвристику
+            // Последнее слово - фамилия, остальное - имя и отчество
+            lastName = parts[parts.length - 1];
+            firstName = parts.slice(0, parts.length - 1).join(' ');
+        }
     }
 
     // Объединяем имя и отчество в одно поле
-    const fullFirstName = [firstName, middleName].filter(Boolean).join(' ');
+    const fullFirstName = [firstName, middleName].filter(Boolean).join(' ').trim();
 
+    console.log('🔍 Parser debug:');
+    console.log('- Input:', fullName);
+    console.log('- Detected last name:', lastName);
+    console.log('- Detected first name:', fullFirstName);
+    
     return { 
         lastName: lastName || '',
         firstName: fullFirstName || '',
-        middleName: middleName || '' // Оставляем для информации в логах
+        middleName: middleName || '' // Для логов
     };
 }
 app.get('/auth', (req, res) => {
@@ -391,6 +443,7 @@ app.get('/', (req, res) => {
 app.listen(PORT, () => {
     console.log(`🚀 Server running on port ${PORT}`);
 });
+
 
 
 
