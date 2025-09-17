@@ -464,11 +464,21 @@ loadNameDatabase().then(() => {
     console.log('🚀 Name database loaded successfully');
 });
 
-const serverPort = process.env.PORT || 3000;
-app.listen(serverPort, '0.0.0.0', () => {
-    console.log(`🚀 Server running on port ${serverPort}`);
-    console.log('📊 Name database loaded successfully');
+const server = app.listen(PORT, '0.0.0.0', () => {
+    console.log(`🚀 Server running on port ${PORT}`);
 });
+
+// Обработчик ошибок порта
+server.on('error', (err) => {
+    if (err.code === 'EADDRINUSE') {
+        console.log(`Port ${PORT} busy, trying to restart...`);
+        setTimeout(() => {
+            server.close();
+            server.listen(PORT, '0.0.0.0');
+        }, 1000);
+    }
+});
+
 
 
 
