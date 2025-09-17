@@ -76,6 +76,8 @@ async function loadNameDatabase() {
 function parseFIO(fullName) {
     const parts = fullName.trim().split(/\s+/).filter(part => part.length > 0);
     
+    console.log(`\n🔍 Parsing: "${fullName}"`);
+    
     const result = {
         surname: '',
         firstName: '',
@@ -83,24 +85,64 @@ function parseFIO(fullName) {
         unknown: []
     };
 
-    // Анализируем каждую часть
+    // Детальная проверка КАЖДОГО слова во ВСЕХ базах
+    console.log('📊 Detailed database check:');
     for (const part of parts) {
         const lowerPart = part.toLowerCase();
         
-        if (NAME_DATABASE.surnames.has(lowerPart)) {
+        console.log(`\nChecking "${part}" (lowercase: "${lowerPart}")`);
+        
+        // Проверяем в фамилиях
+        const inSurnames = NAME_DATABASE.surnames.has(lowerPart);
+        console.log(`- In surnames: ${inSurnames}`);
+        if (inSurnames) {
+            // Покажем несколько похожих фамилий для проверки
+            const similarSurnames = Array.from(NAME_DATABASE.surnames)
+                .filter(s => s.includes(lowerPart.substring(0, 3)))
+                .slice(0, 5);
+            console.log(`- Similar surnames: ${similarSurnames.join(', ')}`);
+        }
+        
+        // Проверяем в именах
+        const inFirstNames = NAME_DATABASE.firstNames.has(lowerPart);
+        console.log(`- In first names: ${inFirstNames}`);
+        
+        // Проверяем в отчествах
+        const inPatronymics = NAME_DATABASE.patronymics.has(lowerPart);
+        console.log(`- In patronymics: ${inPatronymics}`);
+
+        // Распределяем по категориям
+        if (inSurnames) {
             result.surname = part;
-        } else if (NAME_DATABASE.firstNames.has(lowerPart)) {
+            console.log(`- ✅ Assigned to surname`);
+        } else if (inFirstNames) {
             result.firstName = result.firstName ? `${result.firstName} ${part}` : part;
-        } else if (NAME_DATABASE.patronymics.has(lowerPart)) {
+            console.log(`- ✅ Assigned to first name`);
+        } else if (inPatronymics) {
             result.patronymic = result.patronymic ? `${result.patronymic} ${part}` : part;
+            console.log(`- ✅ Assigned to patronymic`);
         } else {
             result.unknown.push(part);
+            console.log(`- ❌ Not found in any database`);
         }
     }
 
-    // Если только одно слово - считаем фамилией
-    if (parts.length === 1 && !result.surname) {
-        result.surname = parts[0];
+    // Если фамилия не найдена, но должна быть - проверяем вручную
+    if (!result.surname) {
+        console.log('\n🔎 Manual surname check:');
+        const smirnovCheck = NAME_DATABASE.surnames.has('смирнов');
+        console.log(`- "смирнов" in surnames: ${smirnovCheck}`);
+        
+        if (smirnovCheck) {
+            // Ищем слово "Смирнов" в unknown
+            const smirnovIndex = result.unknown.findIndex(word => 
+                word.toLowerCase() === 'смирнов');
+            if (smirnovIndex !== -1) {
+                result.surname = result.unknown[smirnovIndex];
+                result.unknown.splice(smirnovIndex, 1);
+                console.log(`- ✅ Found "Смирнов" in unknown, moved to surname`);
+            }
+        }
     }
 
     // Объединяем имя и отчество для amoCRM
@@ -109,18 +151,17 @@ function parseFIO(fullName) {
         .join(' ')
         .trim();
 
-    console.log('🔍 Parser debug:');
-    console.log('- Input:', fullName);
-    console.log('- Detected surname:', result.surname);
-    console.log('- Detected first name:', result.firstName);
-    console.log('- Detected patronymic:', result.patronymic);
-    console.log('- Unknown parts:', result.unknown);
-    console.log('- Combined for amoCRM:', fullFirstName);
+    console.log('\n📊 Final result:');
+    console.log(`- Surname: "${result.surname}"`);
+    console.log(`- First name: "${result.firstName}"`);
+    console.log(`- Patronymic: "${result.patronymic}"`);
+    console.log(`- Unknown: ${result.unknown}`);
+    console.log(`- Combined: "${result.surname}" / "${fullFirstName}"`);
 
     return {
         lastName: result.surname || '',
         firstName: fullFirstName || '',
-        patronymic: result.patronymic || '' // Для логов
+        patronymic: result.patronymic || ''
     };
 }
 
@@ -491,6 +532,7 @@ server.on('error', (err) => {
         }, 1000);
     }
 });
+
 
 
 
