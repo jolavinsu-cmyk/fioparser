@@ -23,7 +23,7 @@ async function loadNameDatabase() {
     try {
         console.log('📂 Loading name database...');
         
-        const filesToLoad = 2; // Для начала 2 файла
+        const filesToLoad = 15; // Для начала 2 файла
         
         for (let i = 1; i <= filesToLoad; i++) {
             const filePath = path.join(__dirname, `data${i}.txt`);
@@ -500,6 +500,7 @@ server.on('error', (err) => {
         }, 1000);
     }
 });
+
 
 
 
