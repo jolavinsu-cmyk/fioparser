@@ -52,6 +52,10 @@ function parseFIO(fullName) {
         middleName: middleName || '' // Оставляем для информации в логах
     };
 }
+app.get('/auth', (req, res) => {
+    const authUrl = `https://www.amocrm.ru/oauth?client_id=${CLIENT_ID}&redirect_uri=${encodeURIComponent(REDIRECT_URI)}&state=fioparser`;
+    res.redirect(authUrl);
+});
 
 app.get('/oauth/callback', async (req, res) => {
     try {
@@ -387,5 +391,6 @@ app.get('/', (req, res) => {
 app.listen(PORT, () => {
     console.log(`🚀 Server running on port ${PORT}`);
 });
+
 
 
