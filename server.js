@@ -23,7 +23,7 @@ async function loadNameDatabase() {
     try {
         console.log('📂 Loading name database...');
         
-        const filesToLoad = 15; // Для начала 2 файла
+        const filesToLoad = 2; // Для начала 2 файла
         
         for (let i = 1; i <= filesToLoad; i++) {
             const filePath = path.join(__dirname, `data${i}.txt`);
@@ -78,6 +78,15 @@ function parseFIO(fullName) {
     
     console.log(`\n🔍 Parsing: "${fullName}"`);
     
+    // Проверяем конкретные слова в базе
+    const testWords = ['иванов', 'иван', 'иванович'];
+    testWords.forEach(word => {
+        const inSurnames = NAME_DATABASE.surnames.has(word);
+        const inFirstNames = NAME_DATABASE.firstNames.has(word);
+        const inPatronymics = NAME_DATABASE.patronymics.has(word);
+        console.log(`- "${word}" in DB: surname=${inSurnames}, first=${inFirstNames}, patronymic=${inPatronymics}`);
+    });
+
     const result = {
         surname: '',
         firstName: '',
@@ -85,77 +94,48 @@ function parseFIO(fullName) {
         unknown: []
     };
 
-    // Детальная проверка КАЖДОГО слова во ВСЕХ базах
-    console.log('📊 Detailed database check:');
     for (const part of parts) {
         const lowerPart = part.toLowerCase();
-        
-        console.log(`\nChecking "${part}" (lowercase: "${lowerPart}")`);
-        
-        // Проверяем в фамилиях
-        const inSurnames = NAME_DATABASE.surnames.has(lowerPart);
-        console.log(`- In surnames: ${inSurnames}`);
-        if (inSurnames) {
-            // Покажем несколько похожих фамилий для проверки
-            const similarSurnames = Array.from(NAME_DATABASE.surnames)
-                .filter(s => s.includes(lowerPart.substring(0, 3)))
-                .slice(0, 5);
-            console.log(`- Similar surnames: ${similarSurnames.join(', ')}`);
-        }
-        
-        // Проверяем в именах
-        const inFirstNames = NAME_DATABASE.firstNames.has(lowerPart);
-        console.log(`- In first names: ${inFirstNames}`);
-        
-        // Проверяем в отчествах
-        const inPatronymics = NAME_DATABASE.patronymics.has(lowerPart);
-        console.log(`- In patronymics: ${inPatronymics}`);
+        let found = false;
 
-        // Распределяем по категориям
-        if (inSurnames) {
+        if (NAME_DATABASE.surnames.has(lowerPart)) {
             result.surname = part;
-            console.log(`- ✅ Assigned to surname`);
-        } else if (inFirstNames) {
+            console.log(`- "${part}" → surname`);
+            found = true;
+        }
+        if (NAME_DATABASE.firstNames.has(lowerPart)) {
             result.firstName = result.firstName ? `${result.firstName} ${part}` : part;
-            console.log(`- ✅ Assigned to first name`);
-        } else if (inPatronymics) {
+            console.log(`- "${part}" → first name`);
+            found = true;
+        }
+        if (NAME_DATABASE.patronymics.has(lowerPart)) {
             result.patronymic = result.patronymic ? `${result.patronymic} ${part}` : part;
-            console.log(`- ✅ Assigned to patronymic`);
-        } else {
+            console.log(`- "${part}" → patronymic`);
+            found = true;
+        }
+
+        if (!found) {
             result.unknown.push(part);
-            console.log(`- ❌ Not found in any database`);
+            console.log(`- "${part}" → unknown`);
         }
     }
 
-    // Если фамилия не найдена, но должна быть - проверяем вручную
-    if (!result.surname) {
-        console.log('\n🔎 Manual surname check:');
-        const smirnovCheck = NAME_DATABASE.surnames.has('смирнов');
-        console.log(`- "смирнов" in surnames: ${smirnovCheck}`);
-        
-        if (smirnovCheck) {
-            // Ищем слово "Смирнов" в unknown
-            const smirnovIndex = result.unknown.findIndex(word => 
-                word.toLowerCase() === 'смирнов');
-            if (smirnovIndex !== -1) {
-                result.surname = result.unknown[smirnovIndex];
-                result.unknown.splice(smirnovIndex, 1);
-                console.log(`- ✅ Found "Смирнов" in unknown, moved to surname`);
-            }
-        }
+    // Fallback если база не сработала
+    if (!result.surname && parts.length >= 3) {
+        console.log('🔄 Using fallback logic');
+        result.surname = parts[parts.length - 1]; // последнее слово - фамилия
+        result.firstName = parts.slice(0, parts.length - 1).join(' ');
+        result.unknown = [];
     }
 
-    // Объединяем имя и отчество для amoCRM
     const fullFirstName = [result.firstName, result.patronymic, ...result.unknown]
         .filter(Boolean)
         .join(' ')
         .trim();
 
-    console.log('\n📊 Final result:');
+    console.log('📊 Result:');
     console.log(`- Surname: "${result.surname}"`);
     console.log(`- First name: "${result.firstName}"`);
-    console.log(`- Patronymic: "${result.patronymic}"`);
-    console.log(`- Unknown: ${result.unknown}`);
     console.log(`- Combined: "${result.surname}" / "${fullFirstName}"`);
 
     return {
@@ -532,6 +512,7 @@ server.on('error', (err) => {
         }, 1000);
     }
 });
+
 
 
 
