@@ -66,6 +66,11 @@ async function loadNameDatabase() {
         console.error('❌ Error loading name database:', error.message);
     }
 }
+// Проверка на валидность
+function isValidName(name) {
+    // Имя должно содержать только буквы и быть не короче 2 символов
+    return /^[а-яё]+$/.test(name) && name.length >= 2;
+}
 
 // Умный парсер на основе базы данных
 function parseFIO(fullName) {
@@ -495,6 +500,7 @@ server.on('error', (err) => {
         }, 1000);
     }
 });
+
 
 
 
