@@ -215,17 +215,26 @@ async function updateContactInAmoCRM(contactId, parsedData) {
 // Функция для проверки количества контактов в amoCRM
 async function checkContactsCount() {
     try {
+        console.log('\n📊 === CONTACTS COUNT CHECK ===');
+        
+        // Проверяем есть ли токены
+        if (!tokens || !tokens.access_token) {
+            console.log('❌ No access token available. Need to authorize first.');
+            console.log('🔑 Please visit: https://fioparser.onrender.com/auth');
+            return;
+        }
+
         const accessToken = await getValidToken();
         if (!accessToken) {
             console.log('❌ No valid token for contacts check');
             return;
         }
-
-        console.log('\n📊 === CONTACTS COUNT CHECK ===');
         
+        console.log('✅ Token is valid, making API request...');
+
         // Делаем простой запрос чтобы проверить общее количество
         const response = await axios.get(
-            `https://${AMOCRM_DOMAIN}.amocrm.ru/api/v4/contacts?limit=1`,
+            `https://${AMOCRM_DOMAIN}.amocrm.ru/api/v4/contacts?limit=5`,
             {
                 headers: { 
                     'Authorization': `Bearer ${accessToken}`,
@@ -240,24 +249,27 @@ async function checkContactsCount() {
         
         // Проверяем структуру ответа
         if (response.data && response.data._embedded) {
-            console.log('👥 Total contacts in system:', response.data._embedded.contacts?.length || 0);
+            const contactsCount = response.data._embedded.contacts?.length || 0;
+            console.log('👥 Contacts in response:', contactsCount);
             
-            // Если есть информация о пагинации - показываем общее количество
+            // Информация о пагинации
             if (response.headers['x-pagination-total-items']) {
-                console.log('📦 Total contacts (from headers):', response.headers['x-pagination-total-items']);
+                console.log('📦 Total contacts in amoCRM:', response.headers['x-pagination-total-items']);
             }
             
-            // Показываем первый контакт для примера
-            if (response.data._embedded.contacts && response.data._embedded.contacts.length > 0) {
-                const sampleContact = response.data._embedded.contacts[0];
-                console.log('🔍 Sample contact:', {
-                    id: sampleContact.id,
-                    name: sampleContact.name,
-                    created: sampleContact.created_at ? new Date(sampleContact.created_at * 1000).toISOString() : 'no date'
+            // Показываем первые 3 контакта для примера
+            if (contactsCount > 0) {
+                console.log('🔍 First 3 contacts:');
+                response.data._embedded.contacts.slice(0, 3).forEach((contact, index) => {
+                    console.log(`  ${index + 1}. ${contact.name || 'No name'} (ID: ${contact.id})`);
+                    if (contact.created_at) {
+                        console.log(`     Created: ${new Date(contact.created_at * 1000).toISOString()}`);
+                    }
                 });
             }
         } else {
-            console.log('❌ Unexpected response structure:', JSON.stringify(response.data, null, 2));
+            console.log('❌ Unexpected response structure');
+            console.log('Full response:', JSON.stringify(response.data, null, 2));
         }
 
     } catch (error) {
@@ -265,12 +277,61 @@ async function checkContactsCount() {
         if (error.response) {
             console.error('📊 Status:', error.response.status);
             console.error('📊 Headers:', JSON.stringify(error.response.headers, null, 2));
-            console.error('📊 Data:', JSON.stringify(error.response.data, null, 2));
+            if (error.response.data) {
+                console.error('📊 Data:', JSON.stringify(error.response.data, null, 2));
+            }
+        } else if (error.request) {
+            console.error('💥 No response received - network error');
         } else {
             console.error('💥 Error:', error.message);
         }
     }
 }
+// Проверка и получение валидного токена
+async function getValidToken() {
+    if (!tokens?.access_token) {
+        console.log('❌ No access token available');
+        return null;
+    }
+
+    // Если токен истек или скоро истечет - обновляем
+    if (Date.now() >= tokens.expires_at - 300000) {
+        console.log('🔄 Token expired or about to expire, refreshing...');
+        const success = await refreshToken();
+        if (!success) return null;
+    }
+    
+    return tokens.access_token;
+}
+
+// Обновление токена
+async function refreshToken() {
+    try {
+        if (!tokens?.refresh_token) {
+            throw new Error('No refresh token available');
+        }
+
+        const response = await axios.post(`https://${AMOCRM_DOMAIN}.amocrm.ru/oauth2/access_token`, {
+            client_id: CLIENT_ID,
+            client_secret: CLIENT_SECRET,
+            grant_type: 'refresh_token',
+            refresh_token: tokens.refresh_token,
+            redirect_uri: REDIRECT_URI
+        });
+
+        tokens = {
+            access_token: response.data.access_token,
+            refresh_token: response.data.refresh_token,
+            expires_at: Date.now() + (response.data.expires_in * 1000)
+        };
+
+        console.log('✅ Token refreshed successfully');
+        return true;
+
+    } catch (error) {
+        console.error('❌ Token refresh error:', error.response?.data || error.message);
+        return false;
+    }
 
 // Статус
 app.get('/status', (req, res) => {
@@ -309,6 +370,7 @@ app.get('/', (req, res) => {
 app.listen(PORT, () => {
     console.log(`🚀 Server running on port ${PORT}`);
 });
+
 
 
 
