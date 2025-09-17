@@ -513,9 +513,9 @@ app.get('/', (req, res) => {
     `);
 });
 // Загружаем базу данных при старте сервера
-loadNameDatabase().then(() => {
-    console.log('🚀 Name database loaded successfully');
-});
+//loadNameDatabase().then(() => {
+//    console.log('🚀 Name database loaded successfully');
+//});
 
 const server = app.listen(PORT, '0.0.0.0', () => {
     console.log(`🚀 Server running on port ${PORT}`);
@@ -531,6 +531,7 @@ server.on('error', (err) => {
         }, 1000);
     }
 });
+
 
 
 
