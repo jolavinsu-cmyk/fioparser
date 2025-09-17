@@ -4,7 +4,6 @@ import axios from 'axios';
 
 const app = express();
 const PORT = process.env.PORT || 3000;
-let lastCheckTime = new Date(Date.now() - 5 * 60 * 1000); // 5 минут назад
 
 // Конфигурация OAuth (замените на свои данные)
 const CLIENT_ID = process.env.AMOCRM_CLIENT_ID || 'd30b21ee-878a-4fe4-9434-ccc2a12b22fd';
@@ -14,7 +13,7 @@ const AMOCRM_DOMAIN = process.env.AMOCRM_DOMAIN || 'insain0';
 
 // Хранилище
 let tokens = null;
-let lastCheckTime = new Date();
+let lastCheckTime = new Date(Date.now() - 5 * 60 * 1000); // 5 минут назад
 
 app.use(cors());
 app.use(express.json());
@@ -224,4 +223,5 @@ app.get('/', (req, res) => {
 app.listen(PORT, () => {
     console.log(`🚀 Server running on port ${PORT}`);
 });
+
 
