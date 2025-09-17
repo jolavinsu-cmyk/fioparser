@@ -1,9 +1,115 @@
 import express from 'express';
 import cors from 'cors';
 import axios from 'axios';
+import fs from 'fs';
+import path from 'path';
+import { fileURLToPath } from 'url';
+
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = path.dirname(__filename);
 
 const app = express();
 const PORT = process.env.PORT || 3000;
+
+// База данных для хранения имен, фамилий и отчеств
+const NAME_DATABASE = {
+    surnames: new Set(),
+    firstNames: new Set(),
+    patronymics: new Set()
+};
+
+// Функция загрузки базы данных из всех файлов
+async function loadNameDatabase() {
+    try {
+        console.log('📂 Loading name database...');
+        
+        for (let i = 1; i <= 15; i++) {
+            const filePath = path.join(__dirname, `data${i}.txt`);
+            
+            if (fs.existsSync(filePath)) {
+                const data = fs.readFileSync(filePath, 'utf8');
+                const lines = data.split('\n').filter(line => line.trim());
+                
+                for (const line of lines) {
+                    const columns = line.split('\t').filter(col => col.trim());
+                    
+                    if (columns.length >= 3) {
+                        // Первый столбец - фамилия
+                        NAME_DATABASE.surnames.add(columns[0].trim().toLowerCase());
+                        // Второй столбец - имя
+                        NAME_DATABASE.firstNames.add(columns[1].trim().toLowerCase());
+                        // Третий столбец - отчество
+                        NAME_DATABASE.patronymics.add(columns[2].trim().toLowerCase());
+                    }
+                }
+                
+                console.log(`✅ Loaded data${i}.txt: ${lines.length} entries`);
+            } else {
+                console.log(`⚠️ File data${i}.txt not found`);
+            }
+        }
+        
+        console.log('📊 Database statistics:');
+        console.log(`- Surnames: ${NAME_DATABASE.surnames.size}`);
+        console.log(`- First names: ${NAME_DATABASE.firstNames.size}`);
+        console.log(`- Patronymics: ${NAME_DATABASE.patronymics.size}`);
+        
+    } catch (error) {
+        console.error('❌ Error loading name database:', error.message);
+    }
+}
+
+// Умный парсер на основе базы данных
+function parseFIO(fullName) {
+    const parts = fullName.trim().split(/\s+/).filter(part => part.length > 0);
+    
+    const result = {
+        surname: '',
+        firstName: '',
+        patronymic: '',
+        unknown: []
+    };
+
+    // Анализируем каждую часть
+    for (const part of parts) {
+        const lowerPart = part.toLowerCase();
+        
+        if (NAME_DATABASE.surnames.has(lowerPart)) {
+            result.surname = part;
+        } else if (NAME_DATABASE.firstNames.has(lowerPart)) {
+            result.firstName = result.firstName ? `${result.firstName} ${part}` : part;
+        } else if (NAME_DATABASE.patronymics.has(lowerPart)) {
+            result.patronymic = result.patronymic ? `${result.patronymic} ${part}` : part;
+        } else {
+            result.unknown.push(part);
+        }
+    }
+
+    // Если только одно слово - считаем фамилией
+    if (parts.length === 1 && !result.surname) {
+        result.surname = parts[0];
+    }
+
+    // Объединяем имя и отчество для amoCRM
+    const fullFirstName = [result.firstName, result.patronymic, ...result.unknown]
+        .filter(Boolean)
+        .join(' ')
+        .trim();
+
+    console.log('🔍 Parser debug:');
+    console.log('- Input:', fullName);
+    console.log('- Detected surname:', result.surname);
+    console.log('- Detected first name:', result.firstName);
+    console.log('- Detected patronymic:', result.patronymic);
+    console.log('- Unknown parts:', result.unknown);
+    console.log('- Combined for amoCRM:', fullFirstName);
+
+    return {
+        lastName: result.surname || '',
+        firstName: fullFirstName || '',
+        patronymic: result.patronymic || '' // Для логов
+    };
+}
 
 // Конфигурация OAuth (замените на свои данные)
 const CLIENT_ID = process.env.AMOCRM_CLIENT_ID || 'd30b21ee-878a-4fe4-9434-ccc2a12b22fd';
@@ -491,10 +597,23 @@ app.get('/', (req, res) => {
         <a href="/status">Статус</a>
     `);
 });
+// Загружаем базу данных при старте сервера
+loadNameDatabase().then(() => {
+    console.log('🚀 Name database loaded successfully');
+});
+
+app.listen(PORT, () => {
+    console.log(`🚀 Server running on port ${PORT}`);
+    console.log('📊 Name database status:');
+    console.log(`- Surnames: ${NAME_DATABASE.surnames.size}`);
+    console.log(`- First names: ${NAME_DATABASE.firstNames.size}`);
+    console.log(`- Patronymics: ${NAME_DATABASE.patronymics.size}`);
+});
 
 app.listen(PORT, () => {
     console.log(`🚀 Server running on port ${PORT}`);
 });
+
 
 
 
