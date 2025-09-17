@@ -81,7 +81,6 @@ async function parseFIO(fullName) {
     const parts = fullName.trim().split(/\s+/).filter(part => part.length > 0);
     
     console.log(`\n🔍 Parsing: "${fullName}"`);
-    console.log(`📊 Current database: file ${NAME_DATABASE.currentFileIndex-1}, words: ${NAME_DATABASE.surnames.size + NAME_DATABASE.firstNames.size + NAME_DATABASE.patronymics.size}`);
     
     const result = {
         surname: '',
@@ -92,13 +91,16 @@ async function parseFIO(fullName) {
 
     let attempts = 0;
     const maxAttempts = NAME_DATABASE.maxFiles;
+    let allWordsFound = false;
     
-    while (attempts < maxAttempts) {
+    while (attempts < maxAttempts && !allWordsFound) {
         attempts++;
         let missingWords = [];
-        let allFound = true;
         
-        // Проверяем каждое слово в текущей базе
+        // СБРОСИМ ФЛАГ ПЕРЕД ПРОВЕРКОЙ
+        allWordsFound = true;
+        
+        // Проверяем каждое слово
         for (const part of parts) {
             const lowerPart = part.toLowerCase();
             let found = false;
@@ -106,40 +108,41 @@ async function parseFIO(fullName) {
             if (isWordInDatabase(part, 'surnames') && !result.surname) {
                 result.surname = part;
                 found = true;
-                console.log(`- ✅ "${part}" → surname (from DB)`);
+                console.log(`- ✅ "${part}" → surname`);
             } 
             else if (isWordInDatabase(part, 'firstNames') && !result.firstName) {
                 result.firstName = result.firstName ? `${result.firstName} ${part}` : part;
                 found = true;
-                console.log(`- ✅ "${part}" → first name (from DB)`);
+                console.log(`- ✅ "${part}" → first name`);
             }
             else if (isWordInDatabase(part, 'patronymics') && !result.patronymic) {
                 result.patronymic = result.patronymic ? `${result.patronymic} ${part}` : part;
                 found = true;
-                console.log(`- ✅ "${part}" → patronymic (from DB)`);
+                console.log(`- ✅ "${part}" → patronymic`);
             }
             
             if (!found) {
                 missingWords.push(part);
-                allFound = false;
+                allWordsFound = false; // ЕСТЬ НЕНАЙДЕННЫЕ СЛОВА
             }
         }
         
-        // Если ВСЕ слова найдены - выходим
-        if (allFound) {
-            console.log('🎯 All words found! Stopping search.');
+        // ЕСЛИ ВСЕ СЛОВА НАЙДЕНЫ - НЕМЕДЛЕННЫЙ ВЫХОД
+        if (allWordsFound) {
+            console.log('🎯 ALL WORDS FOUND! Stopping search.');
             break;
         }
         
-        // Если база полностью загружена - выходим
+        // ЕСЛИ БАЗА ПОЛНОСТЬЮ ЗАГРУЖЕНА - ВЫХОД
         if (NAME_DATABASE.isFullyLoaded) {
-            console.log('📦 Database fully loaded, stopping search.');
+            console.log('📦 Database fully loaded, stopping.');
             break;
         }
         
-        // Загружаем следующий файл только для недостающих слов
+        // Загружаем следующий файл ТОЛЬКО если есть missingWords
         if (missingWords.length > 0) {
-            const loaded = await lazyLoadNextFileIfNeeded(missingWords);
+            console.log(`📂 Loading file data${NAME_DATABASE.currentFileIndex}.txt for: ${missingWords.join(', ')}`);
+            const loaded = await lazyLoadNextFileIfNeeded();
             if (!loaded) {
                 NAME_DATABASE.isFullyLoaded = true;
                 break;
@@ -567,6 +570,7 @@ server.on('error', (err) => {
         }, 1000);
     }
 });
+
 
 
 
