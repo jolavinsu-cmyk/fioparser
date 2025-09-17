@@ -21,20 +21,37 @@ app.use(express.json());
 // Функция парсинга ФИО (оставляем как было)
 function parseFIO(fullName) {
     const parts = fullName.trim().split(/\s+/).filter(part => part.length > 0);
-    let lastName = '', firstName = '', middleName = '';
+    
+    let lastName = '';
+    let firstName = '';
+    let middleName = '';
 
-    if (parts.length === 1) lastName = parts[0];
-    else if (parts.length === 2) { lastName = parts[0]; firstName = parts[1]; }
-    else if (parts.length >= 3) { lastName = parts[0]; firstName = parts[1]; middleName = parts.slice(2).join(' '); }
+    if (parts.length === 1) {
+        // Только одно слово - считаем фамилией
+        lastName = parts[0];
+    } else if (parts.length === 2) {
+        // Два слова: первое - имя, второе - фамилия
+        firstName = parts[0];
+        lastName = parts[1];
+    } else if (parts.length >= 3) {
+        // Три и более слов: 
+        // Последнее слово - фамилия
+        // Первое слово - имя
+        // Все остальные между - отчество
+        lastName = parts[parts.length - 1]; // Последнее слово - фамилия
+        firstName = parts[0]; // Первое слово - имя
+        middleName = parts.slice(1, parts.length - 1).join(' '); // Все между - отчество
+    }
 
-    return { lastName, firstName, middleName };
+    // Объединяем имя и отчество в одно поле
+    const fullFirstName = [firstName, middleName].filter(Boolean).join(' ');
+
+    return { 
+        lastName: lastName || '',
+        firstName: fullFirstName || '',
+        middleName: middleName || '' // Оставляем для информации в логах
+    };
 }
-
-// Авторизация (оставляем как было)
-app.get('/auth', (req, res) => {
-    const authUrl = `https://www.amocrm.ru/oauth?client_id=${CLIENT_ID}&redirect_uri=${encodeURIComponent(REDIRECT_URI)}`;
-    res.redirect(authUrl);
-});
 
 app.get('/oauth/callback', async (req, res) => {
     try {
@@ -161,7 +178,7 @@ async function getRecentContacts() {
 // Обработка контакта (С УЛУЧШЕННЫМ ЛОГИРОВАНИЕМ)
 async function processContact(contact) {
     try {
-        console.log('=== PROCESSING CONTACT ===');
+        console.log('\n=== PROCESSING CONTACT ===');
         console.log('Contact ID:', contact.id);
         console.log('Original name:', contact.name);
         
@@ -171,12 +188,15 @@ async function processContact(contact) {
         }
 
         const parsed = parseFIO(contact.name);
-        console.log('Parsed result:', parsed);
+        console.log('Parsed result:');
+        console.log('- Last name:', parsed.lastName);
+        console.log('- First name:', parsed.firstName);
+        console.log('- Middle name:', parsed.middleName);
 
         // Проверяем, нужно ли вообще обновлять
-        const needsUpdate = parsed.lastName || parsed.firstName;
+        const needsUpdate = parsed.lastName && parsed.firstName;
         if (!needsUpdate) {
-            console.log('⚠️ Skip: Nothing to update');
+            console.log('⚠️ Skip: Not enough data to update');
             return;
         }
 
@@ -197,6 +217,14 @@ async function processContact(contact) {
 // Обновление контакта (С УЛУЧШЕННОЙ ОБРАБОТКОЙ ОШИБОК)
 async function updateContactInAmoCRM(contactId, parsedData) {
     try {
+        const accessToken = await getValidToken();
+        if (!accessToken) {
+            console.log('❌ No valid token for update');
+            return false;
+        }
+
+        // Теперь используем только lastName и firstName
+        // middleName уже объединен в firstName
         const updateData = {
             first_name: parsedData.firstName || '',
             last_name: parsedData.lastName || ''
@@ -209,7 +237,7 @@ async function updateContactInAmoCRM(contactId, parsedData) {
             updateData,
             {
                 headers: {
-                    'Authorization': `Bearer ${tokens.access_token}`,
+                    'Authorization': `Bearer ${accessToken}`,
                     'Content-Type': 'application/json',
                     'Accept': 'application/json'
                 },
@@ -217,13 +245,13 @@ async function updateContactInAmoCRM(contactId, parsedData) {
             }
         );
 
-        console.log('Update response status:', response.status);
+        console.log('✅ Update response status:', response.status);
         return response.status === 200;
 
     } catch (error) {
         if (error.response) {
             console.error('❌ API Error:', error.response.status);
-            console.error('❌ API Response:', error.response.data);
+            console.error('❌ API Response:', JSON.stringify(error.response.data, null, 2));
         } else {
             console.error('❌ Network Error:', error.message);
         }
@@ -359,4 +387,5 @@ app.get('/', (req, res) => {
 app.listen(PORT, () => {
     console.log(`🚀 Server running on port ${PORT}`);
 });
+
 
