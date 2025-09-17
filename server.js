@@ -61,6 +61,14 @@ app.get('/oauth/callback', async (req, res) => {
 
 // Периодическая проверка новых контактов
 async function startPeriodicCheck() {
+    console.log('🚀 Starting periodic contact check every 30 seconds');
+    
+    // Сначала проверяем общее количество контактов
+    setTimeout(async () => {
+        console.log('\n🔍 === INITIAL CONTACTS CHECK ===');
+        await checkContactsCount();
+    }, 2000);
+    
     setInterval(async () => {
         try {
             if (!tokens) {
@@ -71,14 +79,17 @@ async function startPeriodicCheck() {
             console.log('\n🔍 === STARTING PERIODIC CHECK ===');
             console.log('🕐 Last check was:', lastCheckTime.toISOString());
             
+            // Добавляем проверку количества контактов в каждую итерацию
+            await checkContactsCount();
+            
             const contacts = await getRecentContacts();
-            console.log(`📋 Found ${contacts.length} contacts to process`);
+            console.log(`📋 Found ${contacts.length} new contacts to process`);
             
             for (const contact of contacts) {
                 await processContact(contact);
             }
 
-            lastCheckTime = new Date(); // ОБНОВЛЯЕМ ВРЕМЯ ПОСЛЕ ПРОВЕРКИ
+            lastCheckTime = new Date();
             console.log('✅ Check completed. New last check time:', lastCheckTime.toISOString());
 
         } catch (error) {
@@ -201,6 +212,65 @@ async function updateContactInAmoCRM(contactId, parsedData) {
         return false;
     }
 }
+// Функция для проверки количества контактов в amoCRM
+async function checkContactsCount() {
+    try {
+        const accessToken = await getValidToken();
+        if (!accessToken) {
+            console.log('❌ No valid token for contacts check');
+            return;
+        }
+
+        console.log('\n📊 === CONTACTS COUNT CHECK ===');
+        
+        // Делаем простой запрос чтобы проверить общее количество
+        const response = await axios.get(
+            `https://${AMOCRM_DOMAIN}.amocrm.ru/api/v4/contacts?limit=1`,
+            {
+                headers: { 
+                    'Authorization': `Bearer ${accessToken}`,
+                    'Content-Type': 'application/json'
+                },
+                timeout: 10000
+            }
+        );
+
+        console.log('✅ API connection successful');
+        console.log('📈 Response status:', response.status);
+        
+        // Проверяем структуру ответа
+        if (response.data && response.data._embedded) {
+            console.log('👥 Total contacts in system:', response.data._embedded.contacts?.length || 0);
+            
+            // Если есть информация о пагинации - показываем общее количество
+            if (response.headers['x-pagination-total-items']) {
+                console.log('📦 Total contacts (from headers):', response.headers['x-pagination-total-items']);
+            }
+            
+            // Показываем первый контакт для примера
+            if (response.data._embedded.contacts && response.data._embedded.contacts.length > 0) {
+                const sampleContact = response.data._embedded.contacts[0];
+                console.log('🔍 Sample contact:', {
+                    id: sampleContact.id,
+                    name: sampleContact.name,
+                    created: sampleContact.created_at ? new Date(sampleContact.created_at * 1000).toISOString() : 'no date'
+                });
+            }
+        } else {
+            console.log('❌ Unexpected response structure:', JSON.stringify(response.data, null, 2));
+        }
+
+    } catch (error) {
+        console.error('❌ Contacts count check error:');
+        if (error.response) {
+            console.error('📊 Status:', error.response.status);
+            console.error('📊 Headers:', JSON.stringify(error.response.headers, null, 2));
+            console.error('📊 Data:', JSON.stringify(error.response.data, null, 2));
+        } else {
+            console.error('💥 Error:', error.message);
+        }
+    }
+}
 
 // Статус
 app.get('/status', (req, res) => {
@@ -209,6 +279,22 @@ app.get('/status', (req, res) => {
         last_check: lastCheckTime.toISOString(),
         domain: AMOCRM_DOMAIN
     });
+});
+// Ручная проверка контактов
+app.get('/debug/contacts', async (req, res) => {
+    try {
+        await checkContactsCount();
+        res.json({ 
+            success: true, 
+            message: 'Contacts check completed. Check server logs for details.',
+            timestamp: new Date().toISOString()
+        });
+    } catch (error) {
+        res.status(500).json({
+            success: false,
+            error: error.message
+        });
+    }
 });
 
 app.get('/', (req, res) => {
@@ -223,5 +309,6 @@ app.get('/', (req, res) => {
 app.listen(PORT, () => {
     console.log(`🚀 Server running on port ${PORT}`);
 });
+
 
 
