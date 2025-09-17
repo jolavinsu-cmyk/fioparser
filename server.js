@@ -101,15 +101,26 @@ async function startPeriodicCheck() {
 // Получение последних контактов (ИСПРАВЛЕННАЯ ВЕРСИЯ)
 async function getRecentContacts() {
     try {
+        const accessToken = await getValidToken();
+        if (!accessToken) {
+            console.log('❌ No valid token for getting contacts');
+            return [];
+        }
+
         console.log('🕐 Last check time:', lastCheckTime.toISOString());
         
+        // Конвертируем время в Unix timestamp (секунды) для amoCRM
+        const sinceTimestamp = Math.floor(lastCheckTime.getTime() / 1000);
+        
+        // Важно: используем фильтр по времени создания!
         const response = await axios.get(
-            `https://${AMOCRM_DOMAIN}.amocrm.ru/api/v4/contacts?order[created_at]=desc&limit=50`,
+            `https://${AMOCRM_DOMAIN}.amocrm.ru/api/v4/contacts?filter[created_at][from]=${sinceTimestamp}&order=created_at&limit=100`,
             {
                 headers: { 
-                    'Authorization': `Bearer ${tokens.access_token}`,
+                    'Authorization': `Bearer ${accessToken}`,
                     'Content-Type': 'application/json'
-                }
+                },
+                timeout: 10000
             }
         );
 
@@ -118,25 +129,32 @@ async function getRecentContacts() {
             return [];
         }
 
-        const newContacts = response.data._embedded.contacts.filter(contact => {
-            if (!contact.created_at) return false;
-            
-            // amoCRM возвращает timestamp в секундах, а не миллисекундах!
-            const contactTime = new Date(contact.created_at * 1000);
-            const isNew = contactTime > lastCheckTime;
-            
-            if (isNew) {
-                console.log('🎯 New contact found:', contact.name, 'at', contactTime.toISOString());
-            }
-            
-            return isNew;
-        });
+        console.log(`📊 Total contacts in response: ${response.data._embedded.contacts.length}`);
 
-        console.log(`📊 Found ${newContacts.length} new contacts`);
+        // Все контакты из этого запроса - новые (созданы после lastCheckTime)
+        const newContacts = response.data._embedded.contacts;
+
+        console.log(`📋 Found ${newContacts.length} new contacts since last check`);
+        
+        // Логируем новые контакты
+        if (newContacts.length > 0) {
+            console.log('🎯 New contacts found:');
+            newContacts.forEach((contact, index) => {
+                const created = contact.created_at ? new Date(contact.created_at * 1000).toISOString() : 'no date';
+                console.log(`  ${index + 1}. ${contact.name || 'No name'} (ID: ${contact.id}, created: ${created})`);
+            });
+        }
+
         return newContacts;
 
     } catch (error) {
-        console.error('❌ Get contacts error:', error.response?.data || error.message);
+        console.error('❌ Get contacts error:');
+        if (error.response) {
+            console.error('Status:', error.response.status);
+            console.error('Data:', JSON.stringify(error.response.data, null, 2));
+        } else {
+            console.error('Message:', error.message);
+        }
         return [];
     }
 }
@@ -217,13 +235,6 @@ async function checkContactsCount() {
     try {
         console.log('\n📊 === CONTACTS COUNT CHECK ===');
         
-        // Проверяем есть ли токены
-        if (!tokens || !tokens.access_token) {
-            console.log('❌ No access token available. Need to authorize first.');
-            console.log('🔑 Please visit: https://fioparser.onrender.com/auth');
-            return;
-        }
-
         const accessToken = await getValidToken();
         if (!accessToken) {
             console.log('❌ No valid token for contacts check');
@@ -232,9 +243,9 @@ async function checkContactsCount() {
         
         console.log('✅ Token is valid, making API request...');
 
-        // Делаем простой запрос чтобы проверить общее количество
+        // Запрос для проверки общего количества
         const response = await axios.get(
-            `https://${AMOCRM_DOMAIN}.amocrm.ru/api/v4/contacts?limit=5`,
+            `https://${AMOCRM_DOMAIN}.amocrm.ru/api/v4/contacts?limit=1`,
             {
                 headers: { 
                     'Authorization': `Bearer ${accessToken}`,
@@ -247,41 +258,19 @@ async function checkContactsCount() {
         console.log('✅ API connection successful');
         console.log('📈 Response status:', response.status);
         
-        // Проверяем структуру ответа
+        // Проверяем заголовки пагинации
+        if (response.headers['x-pagination-total-items']) {
+            console.log('📦 Total contacts in amoCRM:', response.headers['x-pagination-total-items']);
+        }
+        
         if (response.data && response.data._embedded) {
-            const contactsCount = response.data._embedded.contacts?.length || 0;
-            console.log('👥 Contacts in response:', contactsCount);
-            
-            // Информация о пагинации
-            if (response.headers['x-pagination-total-items']) {
-                console.log('📦 Total contacts in amoCRM:', response.headers['x-pagination-total-items']);
-            }
-            
-            // Показываем первые 3 контакта для примера
-            if (contactsCount > 0) {
-                console.log('🔍 First 3 contacts:');
-                response.data._embedded.contacts.slice(0, 3).forEach((contact, index) => {
-                    console.log(`  ${index + 1}. ${contact.name || 'No name'} (ID: ${contact.id})`);
-                    if (contact.created_at) {
-                        console.log(`     Created: ${new Date(contact.created_at * 1000).toISOString()}`);
-                    }
-                });
-            }
-        } else {
-            console.log('❌ Unexpected response structure');
-            console.log('Full response:', JSON.stringify(response.data, null, 2));
+            console.log('👥 Contacts in current response:', response.data._embedded.contacts?.length || 0);
         }
 
     } catch (error) {
         console.error('❌ Contacts count check error:');
         if (error.response) {
             console.error('📊 Status:', error.response.status);
-            console.error('📊 Headers:', JSON.stringify(error.response.headers, null, 2));
-            if (error.response.data) {
-                console.error('📊 Data:', JSON.stringify(error.response.data, null, 2));
-            }
-        } else if (error.request) {
-            console.error('💥 No response received - network error');
         } else {
             console.error('💥 Error:', error.message);
         }
@@ -370,3 +359,4 @@ app.get('/', (req, res) => {
 app.listen(PORT, () => {
     console.log(`🚀 Server running on port ${PORT}`);
 });
+
