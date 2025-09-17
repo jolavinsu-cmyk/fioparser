@@ -11,72 +11,72 @@ const __dirname = path.dirname(__filename);
 const app = express();
 const PORT = process.env.PORT || 3000;
 
-// База данных для хранения имен, фамилий и отчеств
+// Глобальная база данных (только частые слова)
 const NAME_DATABASE = {
     surnames: new Set(),
     firstNames: new Set(),
-    patronymics: new Set()
+    patronymics: new Set(),
+    currentFileIndex: 1,
+    maxFiles: 15,
+    isFullyLoaded: false
 };
 
-// Функция загрузки базы данных из всех файлов
-async function loadNameDatabase() {
-    try {
-        console.log('📂 Loading name database...');
-        
-        const filesToLoad = 15; // Для начала 2 файла
-        
-        for (let i = 1; i <= filesToLoad; i++) {
-            const filePath = path.join(__dirname, `data${i}.txt`);
-            
-            if (fs.existsSync(filePath)) {
-                const data = fs.readFileSync(filePath, 'utf8');
-                const lines = data.split('\n').filter(line => line.trim());
-                
-                console.log(`📄 File data${i}.txt: ${lines.length} lines`);
-                
-                let loadedCount = 0;
-                for (const line of lines) {
-                    // Разделяем по ЗАПЯТЫМ и убираем лишние пробелы
-                    const columns = line.split(',').map(col => col.trim()).filter(col => col.length > 0);
-                    
-                    // Нужно минимум 3 колонки (фамилия, имя, отчество)
-                    if (columns.length >= 3) {
-                        const surname = columns[0].toLowerCase();
-                        const firstName = columns[1].toLowerCase();
-                        const patronymic = columns[2].toLowerCase();
-                        
-                        // Добавляем в базу
-                        NAME_DATABASE.surnames.add(surname);
-                        NAME_DATABASE.firstNames.add(firstName);
-                        NAME_DATABASE.patronymics.add(patronymic);
-                        loadedCount++;
-                    }
-                }
-                
-                console.log(`✅ Loaded ${loadedCount} valid entries from data${i}.txt`);
-                
-                // Покажем несколько примеров из базы
-                console.log('Sample from database:');
-                const sampleSurnames = Array.from(NAME_DATABASE.surnames).slice(0, 3);
-                const sampleFirstNames = Array.from(NAME_DATABASE.firstNames).slice(0, 3);
-                console.log(`- Surnames: ${sampleSurnames.join(', ')}`);
-                console.log(`- First names: ${sampleFirstNames.join(', ')}`);
-                
-            } else {
-                console.log(`⚠️ File data${i}.txt not found`);
-            }
-        }
-        
-    } catch (error) {
-        console.error('❌ Error loading name database:', error.message);
-    }
+// Функция проверки слова в текущей базе
+function isWordInDatabase(word, category) {
+    const lowerWord = word.toLowerCase();
+    return NAME_DATABASE[category].has(lowerWord);
 }
 
+// Ленивая загрузка следующего файла при необходимости
+async function lazyLoadNextFileIfNeeded(missingWords) {
+    if (NAME_DATABASE.isFullyLoaded || NAME_DATABASE.currentFileIndex >= NAME_DATABASE.maxFiles) {
+        return false;
+    }
+
+    console.log(`📂 Loading next file data${NAME_DATABASE.currentFileIndex}.txt for words: ${missingWords.join(', ')}`);
+    
+    try {
+        const filePath = path.join(__dirname, `data${NAME_DATABASE.currentFileIndex}.txt`);
+        
+        if (fs.existsSync(filePath)) {
+            const data = fs.readFileSync(filePath, 'utf8');
+            const lines = data.split('\n').filter(line => line.trim());
+            
+            let loadedCount = 0;
+            for (const line of lines) {
+                const columns = line.split(',').map(col => col.trim()).filter(col => col.length > 0);
+                
+                if (columns.length >= 3) {
+                    const surname = columns[0].toLowerCase();
+                    const firstName = columns[1].toLowerCase();
+                    const patronymic = columns[2].toLowerCase();
+                    
+                    NAME_DATABASE.surnames.add(surname);
+                    NAME_DATABASE.firstNames.add(firstName);
+                    NAME_DATABASE.patronymics.add(patronymic);
+                    loadedCount++;
+                }
+            }
+            
+            console.log(`✅ Loaded data${NAME_DATABASE.currentFileIndex}.txt: ${loadedCount} words`);
+            NAME_DATABASE.currentFileIndex++;
+            
+            return true;
+        }
+    } catch (error) {
+        console.error('❌ Error loading file:', error.message);
+    }
+    
+    return false;
+}
+
+
 // Умный парсер на основе базы данных
-function parseFIO(fullName) {
+async function parseFIO(fullName) {
     const parts = fullName.trim().split(/\s+/).filter(part => part.length > 0);
     
     console.log(`\n🔍 Parsing: "${fullName}"`);
+    console.log(`📊 Current database: file ${NAME_DATABASE.currentFileIndex-1}, words: ${NAME_DATABASE.surnames.size + NAME_DATABASE.firstNames.size + NAME_DATABASE.patronymics.size}`);
     
     const result = {
         surname: '',
@@ -85,54 +85,85 @@ function parseFIO(fullName) {
         unknown: []
     };
 
-    // Проверяем КАЖДУЮ часть на ТОЧНОЕ совпадение
-    for (const part of parts) {
-        const lowerPart = part.toLowerCase();
-        let foundCategory = null;
+    let attempts = 0;
+    const maxAttempts = NAME_DATABASE.maxFiles;
+    
+    while (attempts < maxAttempts) {
+        attempts++;
+        let missingWords = [];
         
-        // Проверяем в какой базе есть ТОЧНОЕ совпадение
-        if (NAME_DATABASE.surnames.has(lowerPart)) {
-            result.surname = part;
-            foundCategory = 'surname';
-        } else if (NAME_DATABASE.firstNames.has(lowerPart)) {
-            result.firstName = result.firstName ? `${result.firstName} ${part}` : part;
-            foundCategory = 'first name';
-        } else if (NAME_DATABASE.patronymics.has(lowerPart)) {
-            result.patronymic = result.patronymic ? `${result.patronymic} ${part}` : part;
-            foundCategory = 'patronymic';
-        } else {
-            result.unknown.push(part);
-            foundCategory = 'unknown';
+        // Проверяем каждое слово в текущей базе
+        for (const part of parts) {
+            const lowerPart = part.toLowerCase();
+            let found = false;
+            
+            if (isWordInDatabase(part, 'surnames') && !result.surname) {
+                result.surname = part;
+                found = true;
+                console.log(`- ✅ "${part}" → surname (from DB)`);
+            } 
+            else if (isWordInDatabase(part, 'firstNames') && !result.firstName) {
+                result.firstName = result.firstName ? `${result.firstName} ${part}` : part;
+                found = true;
+                console.log(`- ✅ "${part}" → first name (from DB)`);
+            }
+            else if (isWordInDatabase(part, 'patronymics') && !result.patronymic) {
+                result.patronymic = result.patronymic ? `${result.patronymic} ${part}` : part;
+                found = true;
+                console.log(`- ✅ "${part}" → patronymic (from DB)`);
+            }
+            
+            if (!found && !result.unknown.includes(part)) {
+                missingWords.push(part);
+            }
         }
         
-        console.log(`- "${part}" → ${foundCategory}`);
+        // Если все слова найдены или база полностью загружена - выходим
+        if (missingWords.length === 0 || NAME_DATABASE.isFullyLoaded) {
+            break;
+        }
+        
+        // Загружаем следующий файл для недостающих слов
+        const loaded = await lazyLoadNextFileIfNeeded(missingWords);
+        if (!loaded) {
+            NAME_DATABASE.isFullyLoaded = true;
+            break;
+        }
     }
-
-    // Если есть конфликты (например, слово в нескольких базах) - исправляем
-    console.log('📊 Before conflict resolution:');
-    console.log(`- Surname: "${result.surname}"`);
-    console.log(`- First name: "${result.firstName}"`);
-    console.log(`- Patronymic: "${result.patronymic}"`);
-
+    
+    // Добавляем не найденные слова в unknown
+    for (const part of parts) {
+        if (part !== result.surname && !result.firstName.includes(part) && !result.patronymic.includes(part)) {
+            result.unknown.push(part);
+            console.log(`- ❌ "${part}" → unknown (not found in any DB)`);
+        }
+    }
+    
+    // Fallback логика для незавершенных случаев
+    if (!result.surname && parts.length > 0) {
+        result.surname = parts[0];
+        console.log(`- 🔄 "${parts[0]}" → surname (fallback)`);
+    }
+    
     // Объединяем для amoCRM
     const fullFirstName = [result.firstName, result.patronymic, ...result.unknown]
         .filter(Boolean)
         .join(' ')
         .trim();
-
+    
     console.log('📊 Final result:');
     console.log(`- Surname: "${result.surname}"`);
     console.log(`- First name: "${result.firstName}"`);
     console.log(`- Patronymic: "${result.patronymic}"`);
+    console.log(`- Unknown: ${result.unknown}`);
     console.log(`- Combined: "${result.surname}" / "${fullFirstName}"`);
-
+    
     return {
         lastName: result.surname || '',
         firstName: fullFirstName || '',
         patronymic: result.patronymic || ''
     };
 }
-
 // Конфигурация OAuth (замените на свои данные)
 const CLIENT_ID = process.env.AMOCRM_CLIENT_ID || 'd30b21ee-878a-4fe4-9434-ccc2a12b22fd';
 const CLIENT_SECRET = process.env.AMOCRM_CLIENT_SECRET || '0pz2EXM02oankmHtCaZOgFa3rESLXT6F282gVIozREZLHuuYzVyNAFtyYDXMNd2u';
@@ -500,6 +531,7 @@ server.on('error', (err) => {
         }, 1000);
     }
 });
+
 
 
 
