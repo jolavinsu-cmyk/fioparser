@@ -29,11 +29,12 @@ function isWordInDatabase(word, category) {
 
 // Ленивая загрузка следующего файла при необходимости
 async function lazyLoadNextFileIfNeeded(missingWords) {
-    if (NAME_DATABASE.isFullyLoaded || NAME_DATABASE.currentFileIndex >= NAME_DATABASE.maxFiles) {
+    if (NAME_DATABASE.isFullyLoaded || NAME_DATABASE.currentFileIndex > NAME_DATABASE.maxFiles) {
+        console.log('🚫 Database fully loaded or max files reached');
         return false;
     }
 
-    console.log(`📂 Loading next file data${NAME_DATABASE.currentFileIndex}.txt for words: ${missingWords.join(', ')}`);
+    console.log(`📂 Loading file data${NAME_DATABASE.currentFileIndex}.txt for missing words: ${missingWords.join(', ')}`);
     
     try {
         const filePath = path.join(__dirname, `data${NAME_DATABASE.currentFileIndex}.txt`);
@@ -62,12 +63,16 @@ async function lazyLoadNextFileIfNeeded(missingWords) {
             NAME_DATABASE.currentFileIndex++;
             
             return true;
+        } else {
+            console.log(`⚠️ File data${NAME_DATABASE.currentFileIndex}.txt not found`);
+            NAME_DATABASE.currentFileIndex++;
+            return true; // Продолжаем尝试 следующий файл
         }
     } catch (error) {
         console.error('❌ Error loading file:', error.message);
+        NAME_DATABASE.currentFileIndex++;
+        return true; // Продолжаем尝试 следующий файл
     }
-    
-    return false;
 }
 
 
@@ -91,6 +96,7 @@ async function parseFIO(fullName) {
     while (attempts < maxAttempts) {
         attempts++;
         let missingWords = [];
+        let allFound = true;
         
         // Проверяем каждое слово в текущей базе
         for (const part of parts) {
@@ -113,33 +119,48 @@ async function parseFIO(fullName) {
                 console.log(`- ✅ "${part}" → patronymic (from DB)`);
             }
             
-            if (!found && !result.unknown.includes(part)) {
+            if (!found) {
                 missingWords.push(part);
+                allFound = false;
             }
         }
         
-        // Если все слова найдены или база полностью загружена - выходим
-        if (missingWords.length === 0 || NAME_DATABASE.isFullyLoaded) {
+        // Если ВСЕ слова найдены - выходим
+        if (allFound) {
+            console.log('🎯 All words found! Stopping search.');
             break;
         }
         
-        // Загружаем следующий файл для недостающих слов
-        const loaded = await lazyLoadNextFileIfNeeded(missingWords);
-        if (!loaded) {
-            NAME_DATABASE.isFullyLoaded = true;
+        // Если база полностью загружена - выходим
+        if (NAME_DATABASE.isFullyLoaded) {
+            console.log('📦 Database fully loaded, stopping search.');
+            break;
+        }
+        
+        // Загружаем следующий файл только для недостающих слов
+        if (missingWords.length > 0) {
+            const loaded = await lazyLoadNextFileIfNeeded(missingWords);
+            if (!loaded) {
+                NAME_DATABASE.isFullyLoaded = true;
+                break;
+            }
+        } else {
             break;
         }
     }
     
     // Добавляем не найденные слова в unknown
     for (const part of parts) {
-        if (part !== result.surname && !result.firstName.includes(part) && !result.patronymic.includes(part)) {
+        if (part !== result.surname && 
+            !result.firstName.includes(part) && 
+            !result.patronymic.includes(part) &&
+            !result.unknown.includes(part)) {
             result.unknown.push(part);
             console.log(`- ❌ "${part}" → unknown (not found in any DB)`);
         }
     }
     
-    // Fallback логика для незавершенных случаев
+    // Fallback логика
     if (!result.surname && parts.length > 0) {
         result.surname = parts[0];
         console.log(`- 🔄 "${parts[0]}" → surname (fallback)`);
@@ -546,6 +567,7 @@ server.on('error', (err) => {
         }, 1000);
     }
 });
+
 
 
 
