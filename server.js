@@ -332,7 +332,7 @@ async function refreshToken() {
         console.error('❌ Token refresh error:', error.response?.data || error.message);
         return false;
     }
-
+}
 // Статус
 app.get('/status', (req, res) => {
     res.json({
@@ -370,7 +370,3 @@ app.get('/', (req, res) => {
 app.listen(PORT, () => {
     console.log(`🚀 Server running on port ${PORT}`);
 });
-
-
-
-
