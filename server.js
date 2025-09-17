@@ -22,7 +22,7 @@ app.use(express.json());
 function parseFIO(fullName) {
     const parts = fullName.trim().split(/\s+/).filter(part => part.length > 0);
     
-    // Русские фамильные окончания (более полный список)
+    // Русские фамильные окончания
     const surnameEndings = ['ов', 'ев', 'ин', 'ын', 'ский', 'цкий', 'ой', 'ая', 'яя', 'ич', 'ова', 'ева', 'ина', 'ына'];
     
     let lastName = '';
@@ -75,18 +75,67 @@ function parseFIO(fullName) {
         // Если нашли фамилию
         if (surnameIndex !== -1) {
             lastName = parts[surnameIndex];
-            // Все что до фамилии - имя и отчество
-            const beforeSurname = parts.slice(0, surnameIndex);
-            // Все что после фамилии - дополнительное отчество
-            const afterSurname = parts.slice(surnameIndex + 1);
             
-            firstName = beforeSurname.join(' ');
-            middleName = afterSurname.join(' ');
+            // Оставшиеся части: определяем имя и отчество по длине
+            const remainingParts = [...parts.slice(0, surnameIndex), ...parts.slice(surnameIndex + 1)];
+            
+            if (remainingParts.length === 1) {
+                // Одно слово - имя
+                firstName = remainingParts[0];
+            } else if (remainingParts.length >= 2) {
+                // Два и более слов: самое короткое - имя, остальные - отчество
+                let shortestIndex = 0;
+                let minLength = remainingParts[0].length;
+                
+                for (let i = 1; i < remainingParts.length; i++) {
+                    if (remainingParts[i].length < minLength) {
+                        minLength = remainingParts[i].length;
+                        shortestIndex = i;
+                    }
+                }
+                
+                // Самое короткое слово - имя
+                firstName = remainingParts[shortestIndex];
+                
+                // Остальные слова - отчество
+                const patronymicParts = remainingParts.filter((_, index) => index !== shortestIndex);
+                middleName = patronymicParts.join(' ');
+            }
         } else {
-            // Не смогли определить фамилию - используем эвристику
-            // Последнее слово - фамилия, остальное - имя и отчество
-            lastName = parts[parts.length - 1];
-            firstName = parts.slice(0, parts.length - 1).join(' ');
+            // Не смогли определить фамилию - используем эвристику длины
+            // Самое длинное слово - фамилия
+            let longestIndex = 0;
+            let maxLength = parts[0].length;
+            
+            for (let i = 1; i < parts.length; i++) {
+                if (parts[i].length > maxLength) {
+                    maxLength = parts[i].length;
+                    longestIndex = i;
+                }
+            }
+            
+            lastName = parts[longestIndex];
+            
+            // Оставшиеся части: самое короткое - имя, остальные - отчество
+            const remainingParts = parts.filter((_, index) => index !== longestIndex);
+            
+            if (remainingParts.length === 1) {
+                firstName = remainingParts[0];
+            } else if (remainingParts.length >= 2) {
+                let shortestIndex = 0;
+                let minLength = remainingParts[0].length;
+                
+                for (let i = 1; i < remainingParts.length; i++) {
+                    if (remainingParts[i].length < minLength) {
+                        minLength = remainingParts[i].length;
+                        shortestIndex = i;
+                    }
+                }
+                
+                firstName = remainingParts[shortestIndex];
+                const patronymicParts = remainingParts.filter((_, index) => index !== shortestIndex);
+                middleName = patronymicParts.join(' ');
+            }
         }
     }
 
@@ -95,8 +144,11 @@ function parseFIO(fullName) {
 
     console.log('🔍 Parser debug:');
     console.log('- Input:', fullName);
+    console.log('- Parts:', parts);
     console.log('- Detected last name:', lastName);
-    console.log('- Detected first name:', fullFirstName);
+    console.log('- Detected first name:', firstName);
+    console.log('- Detected middle name:', middleName);
+    console.log('- Combined first name:', fullFirstName);
     
     return { 
         lastName: lastName || '',
@@ -443,6 +495,7 @@ app.get('/', (req, res) => {
 app.listen(PORT, () => {
     console.log(`🚀 Server running on port ${PORT}`);
 });
+
 
 
 
