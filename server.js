@@ -316,20 +316,35 @@ async function processContact(contact) {
             return;
         }
 
-        const parsed = parseFIO(contact.name);
+        // Парсим ФИО
+        const parsed = await parseFIO(contact.name);
         console.log('Parsed result:');
         console.log('- Last name:', parsed.lastName);
         console.log('- First name:', parsed.firstName);
         console.log('- Middle name:', parsed.middleName);
 
-        // Проверяем, нужно ли вообще обновлять
-        const needsUpdate = parsed.lastName && parsed.firstName;
+        // Проверяем, нужно ли обновлять (ИЗМЕНИЛИ ЛОГИКУ!)
+        const originalParts = contact.name.trim().split(/\s+/);
+        const parsedFullName = `${parsed.firstName} ${parsed.lastName}`.trim();
+        const needsUpdate = parsed.lastName && parsed.firstName && 
+                          contact.name !== parsedFullName;
+        
         if (!needsUpdate) {
-            console.log('⚠️ Skip: Not enough data to update');
+            console.log('⚠️ Skip: No changes needed');
+            if (contact.name === parsedFullName) {
+                console.log('📝 Names are already in correct format');
+            } else {
+                console.log('❌ Not enough data to update');
+            }
             return;
         }
 
-        // Обновляем контакт
+        console.log('🔄 Needs update:', {
+            from: contact.name,
+            to: parsedFullName
+        });
+
+        // Обновляем контакт в amoCRM
         const success = await updateContactInAmoCRM(contact.id, parsed);
         
         if (success) {
@@ -531,6 +546,7 @@ server.on('error', (err) => {
         }, 1000);
     }
 });
+
 
 
 
