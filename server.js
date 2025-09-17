@@ -23,36 +23,47 @@ async function loadNameDatabase() {
     try {
         console.log('📂 Loading name database...');
         
-        for (let i = 1; i <= 15; i++) {
+        const filesToLoad = 2; // Для начала 2 файла для теста
+        
+        for (let i = 1; i <= filesToLoad; i++) {
             const filePath = path.join(__dirname, `data${i}.txt`);
             
             if (fs.existsSync(filePath)) {
+                // Читаем файл с правильной кодировкой
                 const data = fs.readFileSync(filePath, 'utf8');
                 const lines = data.split('\n').filter(line => line.trim());
                 
+                console.log(`📄 File data${i}.txt: ${lines.length} lines`);
+                
+                // Покажем первые 3 строки для диагностики
+                console.log('Sample lines:');
+                for (let j = 0; j < Math.min(3, lines.length); j++) {
+                    console.log(`  ${j + 1}. "${lines[j]}"`);
+                    // Покажем коды символов для диагностики
+                    console.log(`     Codes: ${Array.from(lines[j]).map(c => c.charCodeAt(0)).join(' ')}`);
+                }
+                
+                let loadedCount = 0;
                 for (const line of lines) {
-                    const columns = line.split('\t').filter(col => col.trim());
+                    // Разделяем по табуляции или пробелам
+                    const columns = line.split(/\t|\s{2,}/).filter(col => col.trim());
                     
                     if (columns.length >= 3) {
-                        // Первый столбец - фамилия
-                        NAME_DATABASE.surnames.add(columns[0].trim().toLowerCase());
-                        // Второй столбец - имя
-                        NAME_DATABASE.firstNames.add(columns[1].trim().toLowerCase());
-                        // Третий столбец - отчество
-                        NAME_DATABASE.patronymics.add(columns[2].trim().toLowerCase());
+                        const surname = columns[0].trim().toLowerCase();
+                        const firstName = columns[1].trim().toLowerCase();
+                        const patronymic = columns[2].trim().toLowerCase();
+                        
+                        // Добавляем в базу
+                        NAME_DATABASE.surnames.add(surname);
+                        NAME_DATABASE.firstNames.add(firstName);
+                        NAME_DATABASE.patronymics.add(patronymic);
+                        loadedCount++;
                     }
                 }
                 
-                console.log(`✅ Loaded data${i}.txt: ${lines.length} entries`);
-            } else {
-                console.log(`⚠️ File data${i}.txt not found`);
+                console.log(`✅ Loaded ${loadedCount} valid entries from data${i}.txt\n`);
             }
         }
-        
-        console.log('📊 Database statistics:');
-        console.log(`- Surnames: ${NAME_DATABASE.surnames.size}`);
-        console.log(`- First names: ${NAME_DATABASE.firstNames.size}`);
-        console.log(`- Patronymics: ${NAME_DATABASE.patronymics.size}`);
         
     } catch (error) {
         console.error('❌ Error loading name database:', error.message);
@@ -478,6 +489,7 @@ server.on('error', (err) => {
         }, 1000);
     }
 });
+
 
 
 
