@@ -57,7 +57,7 @@ async function loadNameDatabase() {
                 
                 // Покажем несколько примеров из базы
                 console.log('Sample from database:');
-                const sampleSurnames = Array.from(NAME_DATABASE.surnames);
+                const sampleSurnames = Array.from(NAME_DATABASE.surnames).slice(0, 3);
                 const sampleFirstNames = Array.from(NAME_DATABASE.firstNames).slice(0, 3);
                 console.log(`- Surnames: ${sampleSurnames.join(', ')}`);
                 console.log(`- First names: ${sampleFirstNames.join(', ')}`);
@@ -500,6 +500,7 @@ server.on('error', (err) => {
         }, 1000);
     }
 });
+
 
 
 
