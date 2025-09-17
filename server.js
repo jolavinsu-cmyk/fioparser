@@ -78,15 +78,6 @@ function parseFIO(fullName) {
     
     console.log(`\n🔍 Parsing: "${fullName}"`);
     
-    // Проверяем конкретные слова в базе
-    const testWords = ['иванов', 'иван', 'иванович'];
-    testWords.forEach(word => {
-        const inSurnames = NAME_DATABASE.surnames.has(word);
-        const inFirstNames = NAME_DATABASE.firstNames.has(word);
-        const inPatronymics = NAME_DATABASE.patronymics.has(word);
-        console.log(`- "${word}" in DB: surname=${inSurnames}, first=${inFirstNames}, patronymic=${inPatronymics}`);
-    });
-
     const result = {
         surname: '',
         firstName: '',
@@ -94,48 +85,45 @@ function parseFIO(fullName) {
         unknown: []
     };
 
+    // Проверяем КАЖДУЮ часть на ТОЧНОЕ совпадение
     for (const part of parts) {
         const lowerPart = part.toLowerCase();
-        let found = false;
-
+        let foundCategory = null;
+        
+        // Проверяем в какой базе есть ТОЧНОЕ совпадение
         if (NAME_DATABASE.surnames.has(lowerPart)) {
             result.surname = part;
-            console.log(`- "${part}" → surname`);
-            found = true;
-        }
-        if (NAME_DATABASE.firstNames.has(lowerPart)) {
+            foundCategory = 'surname';
+        } else if (NAME_DATABASE.firstNames.has(lowerPart)) {
             result.firstName = result.firstName ? `${result.firstName} ${part}` : part;
-            console.log(`- "${part}" → first name`);
-            found = true;
-        }
-        if (NAME_DATABASE.patronymics.has(lowerPart)) {
+            foundCategory = 'first name';
+        } else if (NAME_DATABASE.patronymics.has(lowerPart)) {
             result.patronymic = result.patronymic ? `${result.patronymic} ${part}` : part;
-            console.log(`- "${part}" → patronymic`);
-            found = true;
-        }
-
-        if (!found) {
+            foundCategory = 'patronymic';
+        } else {
             result.unknown.push(part);
-            console.log(`- "${part}" → unknown`);
+            foundCategory = 'unknown';
         }
+        
+        console.log(`- "${part}" → ${foundCategory}`);
     }
 
-    // Fallback если база не сработала
-    if (!result.surname && parts.length >= 3) {
-        console.log('🔄 Using fallback logic');
-        result.surname = parts[parts.length - 1]; // последнее слово - фамилия
-        result.firstName = parts.slice(0, parts.length - 1).join(' ');
-        result.unknown = [];
-    }
+    // Если есть конфликты (например, слово в нескольких базах) - исправляем
+    console.log('📊 Before conflict resolution:');
+    console.log(`- Surname: "${result.surname}"`);
+    console.log(`- First name: "${result.firstName}"`);
+    console.log(`- Patronymic: "${result.patronymic}"`);
 
+    // Объединяем для amoCRM
     const fullFirstName = [result.firstName, result.patronymic, ...result.unknown]
         .filter(Boolean)
         .join(' ')
         .trim();
 
-    console.log('📊 Result:');
+    console.log('📊 Final result:');
     console.log(`- Surname: "${result.surname}"`);
     console.log(`- First name: "${result.firstName}"`);
+    console.log(`- Patronymic: "${result.patronymic}"`);
     console.log(`- Combined: "${result.surname}" / "${fullFirstName}"`);
 
     return {
@@ -512,6 +500,7 @@ server.on('error', (err) => {
         }, 1000);
     }
 });
+
 
 
 
