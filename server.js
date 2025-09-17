@@ -23,7 +23,7 @@ async function loadNameDatabase() {
     try {
         console.log('📂 Loading name database...');
         
-        const filesToLoad = 15;
+        const filesToLoad = 15; // Для начала 2 файла
         
         for (let i = 1; i <= filesToLoad; i++) {
             const filePath = path.join(__dirname, `data${i}.txt`);
@@ -39,23 +39,28 @@ async function loadNameDatabase() {
                     // Разделяем по ЗАПЯТЫМ и убираем лишние пробелы
                     const columns = line.split(',').map(col => col.trim()).filter(col => col.length > 0);
                     
-                    // Берем только первые 3 колонки (игнорируем пол и остальное)
+                    // Нужно минимум 3 колонки (фамилия, имя, отчество)
                     if (columns.length >= 3) {
                         const surname = columns[0].toLowerCase();
                         const firstName = columns[1].toLowerCase();
                         const patronymic = columns[2].toLowerCase();
                         
-                        // Проверяем что это действительно ФИО, а не мусор
-                        if (isValidName(surname) && isValidName(firstName) && isValidName(patronymic)) {
-                            NAME_DATABASE.surnames.add(surname);
-                            NAME_DATABASE.firstNames.add(firstName);
-                            NAME_DATABASE.patronymics.add(patronymic);
-                            loadedCount++;
-                        }
+                        // Добавляем в базу
+                        NAME_DATABASE.surnames.add(surname);
+                        NAME_DATABASE.firstNames.add(firstName);
+                        NAME_DATABASE.patronymics.add(patronymic);
+                        loadedCount++;
                     }
                 }
                 
                 console.log(`✅ Loaded ${loadedCount} valid entries from data${i}.txt`);
+                
+                // Покажем несколько примеров из базы
+                console.log('Sample from database:');
+                const sampleSurnames = Array.from(NAME_DATABASE.surnames);
+                const sampleFirstNames = Array.from(NAME_DATABASE.firstNames).slice(0, 3);
+                console.log(`- Surnames: ${sampleSurnames.join(', ')}`);
+                console.log(`- First names: ${sampleFirstNames.join(', ')}`);
                 
             } else {
                 console.log(`⚠️ File data${i}.txt not found`);
@@ -65,11 +70,6 @@ async function loadNameDatabase() {
     } catch (error) {
         console.error('❌ Error loading name database:', error.message);
     }
-}
-// Проверка на валидность
-function isValidName(name) {
-    // Имя должно содержать только буквы и быть не короче 2 символов
-    return /^[а-яё]+$/.test(name) && name.length >= 2;
 }
 
 // Умный парсер на основе базы данных
@@ -500,6 +500,7 @@ server.on('error', (err) => {
         }, 1000);
     }
 });
+
 
 
 
