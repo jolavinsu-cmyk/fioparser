@@ -464,8 +464,9 @@ loadNameDatabase().then(() => {
     console.log('🚀 Name database loaded successfully');
 });
 
-app.listen(PORT, () => {
-    console.log(`🚀 Server running on port ${PORT}`);
+const serverPort = process.env.PORT || 3000;
+app.listen(serverPort, () => {
+    console.log(`🚀 Server running on port ${serverPort}`);
     console.log('📊 Name database status:');
     console.log(`- Surnames: ${NAME_DATABASE.surnames.size}`);
     console.log(`- First names: ${NAME_DATABASE.firstNames.size}`);
@@ -475,6 +476,7 @@ app.listen(PORT, () => {
 app.listen(PORT, () => {
     console.log(`🚀 Server running on port ${PORT}`);
 });
+
 
 
 
