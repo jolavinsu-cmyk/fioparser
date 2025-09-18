@@ -11,67 +11,43 @@ const __dirname = path.dirname(__filename);
 const app = express();
 const PORT = process.env.PORT || 3000;
 
-// Глобальная база данных (только частые слова)
+// Глобальные переменные
 const NAME_DATABASE = {
-    surnames: new Set(),
-    firstNames: new Set(),
-    patronymics: new Set(),
     currentFileIndex: 1,
-    maxFiles: 15,
-    isFullyLoaded: false
+    maxFiles: 15
 };
 
-// Функция проверки слова в текущей базе
-function isWordInDatabase(word, category) {
-    const lowerWord = word.toLowerCase();
-    return NAME_DATABASE[category].has(lowerWord);
-}
-
-// Ленивая загрузка следующего файла при необходимости
-async function lazyLoadNextFileIfNeeded(missingWords) {
-    if (NAME_DATABASE.isFullyLoaded || NAME_DATABASE.currentFileIndex > NAME_DATABASE.maxFiles) {
-        console.log('🚫 Database fully loaded or max files reached');
-        return false;
-    }
-
-    console.log(`📂 Loading file data${NAME_DATABASE.currentFileIndex}.txt for missing words: ${missingWords.join(', ')}`);
-    
+// Функция поиска в одном файле
+async function searchInFile(word, category, fileIndex) {
     try {
-        const filePath = path.join(__dirname, `data${NAME_DATABASE.currentFileIndex}.txt`);
+        const filePath = path.join(__dirname, `data${fileIndex}.txt`);
         
-        if (fs.existsSync(filePath)) {
-            const data = fs.readFileSync(filePath, 'utf8');
-            const lines = data.split('\n').filter(line => line.trim());
+        if (!fs.existsSync(filePath)) {
+            return false;
+        }
+
+        const data = fs.readFileSync(filePath, 'utf8');
+        const lines = data.split('\n').filter(line => line.trim());
+        const lowerWord = word.toLowerCase();
+
+        for (const line of lines) {
+            const columns = line.split(',').map(col => col.trim()).filter(col => col.length > 0);
             
-            let loadedCount = 0;
-            for (const line of lines) {
-                const columns = line.split(',').map(col => col.trim()).filter(col => col.length > 0);
+            if (columns.length >= 3) {
+                // Проверяем в нужной колонке
+                const columnValue = columns[category === 'surnames' ? 0 : 
+                                   category === 'firstNames' ? 1 : 2].toLowerCase();
                 
-                if (columns.length >= 3) {
-                    const surname = columns[0].toLowerCase();
-                    const firstName = columns[1].toLowerCase();
-                    const patronymic = columns[2].toLowerCase();
-                    
-                    NAME_DATABASE.surnames.add(surname);
-                    NAME_DATABASE.firstNames.add(firstName);
-                    NAME_DATABASE.patronymics.add(patronymic);
-                    loadedCount++;
+                if (columnValue === lowerWord) {
+                    return true;
                 }
             }
-            
-            console.log(`✅ Loaded data${NAME_DATABASE.currentFileIndex}.txt: ${loadedCount} words`);
-            NAME_DATABASE.currentFileIndex++;
-            
-            return true;
-        } else {
-            console.log(`⚠️ File data${NAME_DATABASE.currentFileIndex}.txt not found`);
-            NAME_DATABASE.currentFileIndex++;
-            return true; // Продолжаем следующий файл
         }
+        
+        return false;
     } catch (error) {
-        console.error('❌ Error loading file:', error.message);
-        NAME_DATABASE.currentFileIndex++;
-        return true; // Продолжаем следующий файл
+        console.error(`❌ Error searching in data${fileIndex}.txt:`, error.message);
+        return false;
     }
 }
 
@@ -81,7 +57,6 @@ async function parseFIO(fullName) {
     const parts = fullName.trim().split(/\s+/).filter(part => part.length > 0);
     
     console.log(`\n🔍 Parsing: "${fullName}"`);
-    console.log(`📊 Current database: file ${NAME_DATABASE.currentFileIndex-1}, words: ${NAME_DATABASE.surnames.size + NAME_DATABASE.firstNames.size + NAME_DATABASE.patronymics.size}`);
     
     const result = {
         surname: '',
@@ -90,95 +65,59 @@ async function parseFIO(fullName) {
         unknown: []
     };
 
-    let attempts = 0;
-    const maxAttempts = NAME_DATABASE.maxFiles;
-    
-    while (attempts < maxAttempts) {
-        attempts++;
-        let missingWords = [];
-        let allFound = true;
+    // Для каждой части ищем по файлам последовательно
+    for (const part of parts) {
+        let found = false;
+        let foundCategory = '';
         
-        // Проверяем каждое слово в текущей базе
-        for (const part of parts) {
-            const lowerPart = part.toLowerCase();
-            let found = false;
+        // Ищем во всех файлах последовательно
+        for (let fileIndex = 1; fileIndex <= NAME_DATABASE.maxFiles; fileIndex++) {
+            if (found) break;
             
-            if (isWordInDatabase(part, 'surnames') && !result.surname) {
+            // Проверяем во всех трех категориях
+            if (!result.surname && await searchInFile(part, 'surnames', fileIndex)) {
                 result.surname = part;
                 found = true;
-                console.log(`- ✅ "${part}" → surname (from DB)`);
-            } 
-            else if (isWordInDatabase(part, 'firstNames') && !result.firstName) {
-                result.firstName = result.firstName ? `${result.firstName} ${part}` : part;
+                foundCategory = 'surname';
+                console.log(`- ✅ "${part}" → surname (found in data${fileIndex}.txt)`);
+            }
+            else if (!result.firstName && await searchInFile(part, 'firstNames', fileIndex)) {
+                result.firstName = part;
                 found = true;
-                console.log(`- ✅ "${part}" → first name (from DB)`);
+                foundCategory = 'first name';
+                console.log(`- ✅ "${part}" → first name (found in data${fileIndex}.txt)`);
             }
-            else if (isWordInDatabase(part, 'patronymics') && !result.patronymic) {
-                result.patronymic = result.patronymic ? `${result.patronymic} ${part}` : part;
+            else if (!result.patronymic && await searchInFile(part, 'patronymics', fileIndex)) {
+                result.patronymic = part;
                 found = true;
-                console.log(`- ✅ "${part}" → patronymic (from DB)`);
-            }
-            
-            if (!found) {
-                missingWords.push(part);
-                allFound = false;
+                foundCategory = 'patronymic';
+                console.log(`- ✅ "${part}" → patronymic (found in data${fileIndex}.txt)`);
             }
         }
         
-        // Если ВСЕ слова найдены - выходим
-        if (allFound) {
-            console.log('🎯 All words found! Stopping search.');
-            break;
-        }
-        
-        // Если база полностью загружена - выходим
-        if (NAME_DATABASE.isFullyLoaded) {
-            console.log('📦 Database fully loaded, stopping search.');
-            break;
-        }
-        
-        // Загружаем следующий файл только для недостающих слов
-        if (missingWords.length > 0) {
-            const loaded = await lazyLoadNextFileIfNeeded(missingWords);
-            if (!loaded) {
-                NAME_DATABASE.isFullyLoaded = true;
-                break;
-            }
-        } else {
-            break;
-        }
-    }
-    
-    // Добавляем не найденные слова в unknown
-    for (const part of parts) {
-        if (part !== result.surname && 
-            !result.firstName.includes(part) && 
-            !result.patronymic.includes(part) &&
-            !result.unknown.includes(part)) {
+        if (!found) {
             result.unknown.push(part);
-            console.log(`- ❌ "${part}" → unknown (not found in any DB)`);
+            console.log(`- ❌ "${part}" → unknown (not found in any file)`);
         }
     }
-    
-    // Fallback логика
-    if (!result.surname && parts.length > 0) {
-        result.surname = parts[0];
-        console.log(`- 🔄 "${parts[0]}" → surname (fallback)`);
-    }
-    
+
+    // Сбрасываем счетчик файлов для следующего контакта
+    NAME_DATABASE.currentFileIndex = 1;
+
     // Объединяем для amoCRM
-    const fullFirstName = [result.firstName, result.patronymic, ...result.unknown]
-        .filter(Boolean)
-        .join(' ')
-        .trim();
-    
+    const fullFirstName = [
+        result.firstName || '',
+        result.patronymic || '', 
+        ...(result.unknown || [])
+    ].filter(part => part && part.trim().length > 0).join(' ').trim();
+
     console.log('📊 Final result:');
     console.log(`- Surname: "${result.surname}"`);
     console.log(`- First name: "${result.firstName}"`);
     console.log(`- Patronymic: "${result.patronymic}"`);
     console.log(`- Unknown: ${result.unknown}`);
     console.log(`- Combined: "${result.surname}" / "${fullFirstName}"`);
-    
+
     return {
         lastName: result.surname || '',
         firstName: fullFirstName || '',
@@ -567,6 +506,7 @@ server.on('error', (err) => {
         }, 1000);
     }
 });
+
 
 
 
