@@ -185,20 +185,31 @@ async function startPeriodicCheck() {
 
         console.log('\n🔍 === STARTING PERIODIC CHECK ===');
         
-        try {
-            const contacts = await getRecentContacts();
-            console.log(`📋 Found ${contacts.length} new contacts to process`);
-            
-            for (const contact of contacts) {
-                await processContact(contact);
+        const contacts = await getRecentContacts();
+        console.log(`📋 Found ${contacts.length} new contacts to process`);
+        
+        const processedContacts = [];
+        const failedContacts = [];
+        
+        for (const contact of contacts) {
+            const success = await processContact(contact);
+            if (success) {
+                processedContacts.push(contact.id);
+            } else {
+                failedContacts.push(contact.id);
             }
-        } catch (error) {
-            console.error('💥 Error in periodic check:', error.message);
-            // Продолжаем работу даже при ошибке
+            
+            // Небольшая пауза между контактами
+            await new Promise(resolve => setTimeout(resolve, 500));
         }
 
-        lastCheckTime = new Date();
-        console.log('✅ Check completed. New last check time:', lastCheckTime.toISOString());
+        console.log(`📊 Processed: ${processedContacts.length} success, ${failedContacts.length} failed`);
+        
+        // ОБНОВЛЯЕМ ВРЕМЯ ТОЛЬКО ЕСЛИ БЫЛИ КОНТАКТЫ
+        if (contacts.length > 0) {
+            lastCheckTime = new Date();
+            console.log('✅ Check completed. New last check time:', lastCheckTime.toISOString());
+        }
 
     } catch (error) {
         console.error('💥 Periodic check error:', error.message);
@@ -217,10 +228,8 @@ async function getRecentContacts() {
 
         console.log('🕐 Last check time:', lastCheckTime.toISOString());
         
-        // Конвертируем время в Unix timestamp (секунды) для amoCRM
         const sinceTimestamp = Math.floor(lastCheckTime.getTime() / 1000);
         
-        // Важно: используем фильтр по времени создания!
         const response = await axios.get(
             `https://${AMOCRM_DOMAIN}.amocrm.ru/api/v4/contacts?filter[created_at][from]=${sinceTimestamp}&order=created_at&limit=100`,
             {
@@ -237,32 +246,20 @@ async function getRecentContacts() {
             return [];
         }
 
-        console.log(`📊 Total contacts in response: ${response.data._embedded.contacts.length}`);
-
-        // Все контакты из этого запроса - новые (созданы после lastCheckTime)
-        const newContacts = response.data._embedded.contacts;
+        // ФИЛЬТРУЕМ: только контакты созданные ДО начала этой проверки
+        const now = new Date();
+        const newContacts = response.data._embedded.contacts.filter(contact => {
+            if (!contact.created_at) return false;
+            const contactTime = new Date(contact.created_at * 1000);
+            return contactTime < now; // Только контакты созданные до текущего времени
+        });
 
         console.log(`📋 Found ${newContacts.length} new contacts since last check`);
         
-        // Логируем новые контакты
-        if (newContacts.length > 0) {
-            console.log('🎯 New contacts found:');
-            newContacts.forEach((contact, index) => {
-                const created = contact.created_at ? new Date(contact.created_at * 1000).toISOString() : 'no date';
-                console.log(`  ${index + 1}. ${contact.name || 'No name'} (ID: ${contact.id}, created: ${created})`);
-            });
-        }
-
         return newContacts;
 
     } catch (error) {
         console.error('❌ Get contacts error:');
-        if (error.response) {
-            console.error('Status:', error.response.status);
-            console.error('Data:', JSON.stringify(error.response.data, null, 2));
-        } else {
-            console.error('Message:', error.message);
-        }
         return [];
     }
 }
@@ -275,10 +272,10 @@ async function processContact(contact) {
         
         if (!contact.name || contact.name.trim().length < 2) {
             console.log('❌ Skip: No valid name');
-            return;
+            return true; // Помечаем как обработанный
         }
 
-        // Парсим ФИО
+        // Парсим ФИО только один раз
         const parsed = await parseFIO(contact.name);
         
         // Проверяем нужно ли обновлять
@@ -288,7 +285,7 @@ async function processContact(contact) {
         
         if (!needsUpdate) {
             console.log('⚠️ Skip: No changes needed');
-            return;
+            return true; // Помечаем как обработанный
         }
 
         console.log('🔄 Needs update:', {
@@ -301,15 +298,15 @@ async function processContact(contact) {
         
         if (success) {
             console.log('✅ Contact updated successfully');
-            
-            // Небольшая задержка перед следующим контактом
-            await new Promise(resolve => setTimeout(resolve, 500));
+            return true; // Успешно обработан
         } else {
-            console.log('❌ Failed to update contact after all attempts');
+            console.log('❌ Failed to update contact');
+            return false; // Не обработан (будет повторно в следующей проверке)
         }
 
     } catch (error) {
         console.error('💥 Process contact error:', error.message);
+        return false; // Не обработан
     }
 }
 
@@ -525,3 +522,4 @@ server.on('error', (err) => {
         }, 1000);
     }
 });
+
