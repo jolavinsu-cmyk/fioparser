@@ -135,9 +135,9 @@ async function parseFIO(fullName) {
   console.log(`- Combined: "${lastNameFinal}" / "${fullFirstName}"`);
 
   return {
-    lastName: lastNameFinal,
-    firstName: fullFirstName || '',
-    patronymic: result.patronymic || ''
+  lastName: result.surname ? result.surname : '',
+  firstName: fullFirstName || '',
+  patronymic: result.patronymic || ''
   };
 }
 
@@ -352,7 +352,7 @@ async function processContact(contact) {
 
     // Шаг 2: проверяем есть ли смысл обновлять
     const parsedFullName = `${state.parsedData.firstName} ${state.parsedData.lastName}`.trim();
-    const needsUpdate = state.parsedData.lastName && state.parsedData.firstName && contact.name !== parsedFullName;
+    const needsUpdate = state.parsedData.firstName && contact.name !== parsedFullName;
 
     if (!needsUpdate) {
       console.log('⚠️ Skip: No changes needed — removing from memory.');
@@ -496,4 +496,5 @@ server.on('error', (err) => {
     console.error('Server error:', err);
   }
 });
+
 
