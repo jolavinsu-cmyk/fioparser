@@ -170,23 +170,26 @@ async function parseFIO(fullName) {
     }
     
     // Объединяем для amoCRM
-    const fullFirstName = [result.firstName, result.patronymic, ...result.unknown]
-        .filter(Boolean)
-        .join(' ')
-        .trim();
-    
-    console.log('📊 Final result:');
-    console.log(`- Surname: "${result.surname}"`);
-    console.log(`- First name: "${result.firstName}"`);
-    console.log(`- Patronymic: "${result.patronymic}"`);
-    console.log(`- Unknown: ${result.unknown}`);
-    console.log(`- Combined: "${result.surname}" / "${fullFirstName}"`);
-    
-    return {
-        lastName: result.surname || '',
-        firstName: fullFirstName || '',
-        patronymic: result.patronymic || ''
-    };
+    const fullFirstNameParts = [
+    result.firstName || '', 
+    result.patronymic || '', 
+    ...(result.unknown || [])
+].filter(part => part && typeof part === 'string' && part.trim().length > 0);
+
+const fullFirstName = fullFirstNameParts.join(' ').trim();
+
+console.log('📊 Final result:');
+console.log(`- Surname: "${result.surname || ''}"`);
+console.log(`- First name: "${result.firstName || ''}"`);
+console.log(`- Patronymic: "${result.patronymic || ''}"`);
+console.log(`- Unknown: ${result.unknown || []}`);
+console.log(`- Combined: "${result.surname || ''}" / "${fullFirstName}"`);
+
+return {
+    lastName: result.surname || '',
+    firstName: fullFirstName || '',
+    patronymic: result.patronymic || ''
+};
 }
 // Конфигурация OAuth (замените на свои данные)
 const CLIENT_ID = process.env.AMOCRM_CLIENT_ID || 'd30b21ee-878a-4fe4-9434-ccc2a12b22fd';
@@ -570,6 +573,7 @@ server.on('error', (err) => {
         }, 1000);
     }
 });
+
 
 
 
