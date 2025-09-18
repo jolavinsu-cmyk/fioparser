@@ -275,24 +275,19 @@ async function getRecentContacts() {
 }
 // Обработка контакта (С УЛУЧШЕННЫМ ЛОГИРОВАНИЕМ)
 async function processContact(contact) {
-    try {
-        console.log('\n=== PROCESSING CONTACT ===');
-        console.log('Contact ID:', contact.id);
-        console.log('Original name:', contact.name);
+    console.log('\n=== PROCESSING CONTACT ===');
+    console.log('Contact ID:', contact.id);
+    console.log('Original name:', contact.name);
 
-        if (!contact.name || contact.name.trim().length < 2) {
-            console.log('❌ Skip: No valid name');
-            return;
-        }
+    if (!contact.name || contact.name.trim().length < 2) {
+        console.log('❌ Skip: No valid name');
+        return;
+    }
 
-        // Проверяем, не был ли уже обработан
-        let state = processingState.get(contact.id);
-        if (state) {
-            console.log(`⚠️ Skip: Contact ${contact.id} already in process with status "${state.status}"`);
-            return;
-        }
+    let state = processingState.get(contact.id);
 
-        // Парсим сразу
+    // если контакта ещё нет в памяти — парсим и сохраняем
+    if (!state) {
         const parsed = await parseFIO(contact.name);
         state = {
             status: 'parsed',
@@ -300,46 +295,47 @@ async function processContact(contact) {
             parsedData: parsed
         };
         processingState.set(contact.id, state);
-        console.log('💾 Parsed and saved state:', state);
+        console.log('💾 New parsed state saved:', state);
+    } else {
+        console.log(`🔄 Resume contact ${contact.id}, attempt ${state.attempts + 1}`);
+    }
 
-        // Проверяем, есть ли смысл обновлять
-        const parsedFullName = `${state.parsedData.firstName} ${state.parsedData.lastName}`.trim();
-        const needsUpdate = state.parsedData.lastName && state.parsedData.firstName &&
-                          contact.name !== parsedFullName;
+    const parsedFullName = `${state.parsedData.firstName} ${state.parsedData.lastName}`.trim();
+    const needsUpdate = state.parsedData.lastName && state.parsedData.firstName &&
+                      contact.name !== parsedFullName;
 
-        if (!needsUpdate) {
-            console.log('⚠️ Skip: No changes needed');
-            processingState.delete(contact.id); // ❌ очищаем память
+    if (!needsUpdate) {
+        console.log('⚠️ Skip: No changes needed');
+        processingState.delete(contact.id);
+        console.log(`🗑 Contact ${contact.id} removed from memory (no update needed)`);
+        return;
+    }
+
+    // цикл обновлений
+    while (state.attempts < MAX_UPDATE_ATTEMPTS) {
+        console.log(`🔄 Updating contact (attempt ${state.attempts + 1}/${MAX_UPDATE_ATTEMPTS})`);
+
+        const success = await updateContactInAmoCRM(contact.id, state.parsedData);
+
+        if (success) {
+            console.log('✅ Contact updated successfully');
+            processingState.delete(contact.id);
+            console.log(`🗑 Contact ${contact.id} removed from memory (done)`);
             return;
         }
 
-        // Цикл повторных попыток
-        while (state.attempts < MAX_UPDATE_ATTEMPTS) {
-            console.log(`🔄 Updating contact (attempt ${state.attempts + 1}/${MAX_UPDATE_ATTEMPTS})`);
-            const success = await updateContactInAmoCRM(contact.id, state.parsedData);
+        state.attempts++;
+        processingState.set(contact.id, state);
 
-            if (success) {
-                console.log('✅ Contact updated successfully');
-                processingState.delete(contact.id); // ❌ очищаем память
-                return;
-            }
-
-            state.attempts++;
-            processingState.set(contact.id, state);
-
-            if (state.attempts >= MAX_UPDATE_ATTEMPTS) {
-                console.log(`🚫 Contact ${contact.id} failed after ${MAX_UPDATE_ATTEMPTS} attempts`);
-                processingState.delete(contact.id); // ❌ очищаем память
-                return;
-            }
-
-            console.log('❌ Update failed, retrying...');
-            await new Promise(r => setTimeout(r, 2000));
+        if (state.attempts >= MAX_UPDATE_ATTEMPTS) {
+            console.log(`🚫 Contact ${contact.id} failed after ${MAX_UPDATE_ATTEMPTS} attempts`);
+            processingState.delete(contact.id);
+            console.log(`🗑 Contact ${contact.id} removed from memory (failed)`);
+            return;
         }
 
-    } catch (error) {
-        console.error('💥 Process contact error:', error.message);
-        processingState.delete(contact.id); // ❌ очищаем даже при ошибке
+        console.log('❌ Update failed, will retry...');
+        await new Promise(r => setTimeout(r, 2000));
     }
 }
 
@@ -540,6 +536,7 @@ server.on('error', (err) => {
         }, 1000);
     }
 });
+
 
 
 
