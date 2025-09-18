@@ -285,29 +285,26 @@ async function processContact(contact) {
             return;
         }
 
-        // Проверяем текущее состояние
+        // Проверяем, не был ли уже обработан
         let state = processingState.get(contact.id);
-
         if (state && (state.status === 'done' || state.status === 'failed')) {
             console.log(`⚠️ Skip: Contact ${contact.id} already processed with status "${state.status}"`);
             return;
         }
 
+        // Если контакта ещё нет в памяти → парсим
         if (!state) {
-            // Новый контакт — парсим и сохраняем
             const parsed = await parseFIO(contact.name);
-
             state = {
                 status: 'parsed',
                 attempts: 0,
                 parsedData: parsed
             };
             processingState.set(contact.id, state);
-
-            console.log('💾 Saved parsed state:', state);
+            console.log('💾 Parsed and saved state:', state);
         }
 
-        // Проверяем нужно ли обновлять
+        // Проверяем, нужно ли вообще обновлять
         const parsedFullName = `${state.parsedData.firstName} ${state.parsedData.lastName}`.trim();
         const needsUpdate = state.parsedData.lastName && state.parsedData.firstName &&
                           contact.name !== parsedFullName;
@@ -318,27 +315,28 @@ async function processContact(contact) {
             return;
         }
 
-        // Проверяем количество попыток
-        if (state.attempts >= MAX_UPDATE_ATTEMPTS) {
-            console.log(`🚫 Max attempts reached for contact ${contact.id}`);
-            processingState.set(contact.id, { ...state, status: 'failed' });
-            return;
-        }
+        // Цикл повторных попыток для одного контакта
+        while (state.attempts < MAX_UPDATE_ATTEMPTS) {
+            console.log(`🔄 Updating contact (attempt ${state.attempts + 1}/${MAX_UPDATE_ATTEMPTS})`);
+            const success = await updateContactInAmoCRM(contact.id, state.parsedData);
 
-        console.log('🔄 Updating contact, attempt:', state.attempts + 1);
+            if (success) {
+                console.log('✅ Contact updated successfully');
+                processingState.set(contact.id, { ...state, status: 'done' });
+                return; // завершаем обработку
+            }
 
-        const success = await updateContactInAmoCRM(contact.id, state.parsedData);
+            state.attempts++;
+            processingState.set(contact.id, state);
 
-        if (success) {
-            console.log('✅ Contact updated successfully');
-            processingState.set(contact.id, { ...state, status: 'done' });
-        } else {
-            console.log('❌ Failed update, will retry later');
-            processingState.set(contact.id, { 
-                ...state, 
-                status: 'updating', 
-                attempts: state.attempts + 1 
-            });
+            if (state.attempts >= MAX_UPDATE_ATTEMPTS) {
+                console.log(`🚫 Contact ${contact.id} failed after ${MAX_UPDATE_ATTEMPTS} attempts`);
+                processingState.set(contact.id, { ...state, status: 'failed' });
+                return;
+            }
+
+            console.log('❌ Update failed, retrying...');
+            await new Promise(r => setTimeout(r, 2000)); // задержка перед повтором
         }
 
     } catch (error) {
@@ -543,5 +541,6 @@ server.on('error', (err) => {
         }, 1000);
     }
 });
+
 
 
