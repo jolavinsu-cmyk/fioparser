@@ -16,6 +16,13 @@ const NAME_DATABASE = {
     currentFileIndex: 1,
     maxFiles: 15
 };
+// In-memory state storage
+// ==========================
+const processingState = new Map(); 
+// contactId -> { status, attempts, parsedData }
+
+const MAX_UPDATE_ATTEMPTS = 3;
+
 
 // Функция поиска в одном файле
 async function searchInFile(word, category, fileIndex) {
@@ -272,40 +279,66 @@ async function processContact(contact) {
         console.log('\n=== PROCESSING CONTACT ===');
         console.log('Contact ID:', contact.id);
         console.log('Original name:', contact.name);
-        
+
         if (!contact.name || contact.name.trim().length < 2) {
             console.log('❌ Skip: No valid name');
             return;
         }
 
-        // Парсим ФИО
-        const parsed = await parseFIO(contact.name);
-        
-        // Проверяем нужно ли обновлять
-        const parsedFullName = `${parsed.firstName} ${parsed.lastName}`.trim();
-        const needsUpdate = parsed.lastName && parsed.firstName && 
-                          contact.name !== parsedFullName;
-        
-        if (!needsUpdate) {
-            console.log('⚠️ Skip: No changes needed');
+        // Проверяем текущее состояние
+        let state = processingState.get(contact.id);
+
+        if (state && (state.status === 'done' || state.status === 'failed')) {
+            console.log(`⚠️ Skip: Contact ${contact.id} already processed with status "${state.status}"`);
             return;
         }
 
-        console.log('🔄 Needs update:', {
-            from: contact.name,
-            to: parsedFullName
-        });
+        if (!state) {
+            // Новый контакт — парсим и сохраняем
+            const parsed = await parseFIO(contact.name);
 
-        // Обновляем контакт с повторными попытками
-        const success = await updateContactInAmoCRM(contact.id, parsed);
-        
+            state = {
+                status: 'parsed',
+                attempts: 0,
+                parsedData: parsed
+            };
+            processingState.set(contact.id, state);
+
+            console.log('💾 Saved parsed state:', state);
+        }
+
+        // Проверяем нужно ли обновлять
+        const parsedFullName = `${state.parsedData.firstName} ${state.parsedData.lastName}`.trim();
+        const needsUpdate = state.parsedData.lastName && state.parsedData.firstName &&
+                          contact.name !== parsedFullName;
+
+        if (!needsUpdate) {
+            console.log('⚠️ Skip: No changes needed');
+            processingState.set(contact.id, { ...state, status: 'done' });
+            return;
+        }
+
+        // Проверяем количество попыток
+        if (state.attempts >= MAX_UPDATE_ATTEMPTS) {
+            console.log(`🚫 Max attempts reached for contact ${contact.id}`);
+            processingState.set(contact.id, { ...state, status: 'failed' });
+            return;
+        }
+
+        console.log('🔄 Updating contact, attempt:', state.attempts + 1);
+
+        const success = await updateContactInAmoCRM(contact.id, state.parsedData);
+
         if (success) {
             console.log('✅ Contact updated successfully');
-            
-            // Небольшая задержка перед следующим контактом
-            await new Promise(resolve => setTimeout(resolve, 500));
+            processingState.set(contact.id, { ...state, status: 'done' });
         } else {
-            console.log('❌ Failed to update contact after all attempts');
+            console.log('❌ Failed update, will retry later');
+            processingState.set(contact.id, { 
+                ...state, 
+                status: 'updating', 
+                attempts: state.attempts + 1 
+            });
         }
 
     } catch (error) {
@@ -315,70 +348,55 @@ async function processContact(contact) {
 
 // Обновление контакта (С УЛУЧШЕННОЙ ОБРАБОТКОЙ ОШИБОК)
 async function updateContactInAmoCRM(contactId, parsedData) {
-    const maxRetries = 3;
-    const retryDelay = 2000; // 2 секунды между попытками
-    
-    for (let attempt = 1; attempt <= maxRetries; attempt++) {
-        try {
-            const accessToken = await getValidToken();
-            if (!accessToken) {
-                console.log('❌ No valid token for update');
-                return false;
-            }
-
-            const updateData = {
-                first_name: parsedData.firstName || '',
-                last_name: parsedData.lastName || ''
-            };
-
-            console.log(`🔄 Update attempt ${attempt}/${maxRetries}:`, updateData);
-
-            const response = await axios.patch(
-                `https://${AMOCRM_DOMAIN}.amocrm.ru/api/v4/contacts/${contactId}`,
-                updateData,
-                {
-                    headers: {
-                        'Authorization': `Bearer ${accessToken}`,
-                        'Content-Type': 'application/json',
-                        'Accept': 'application/json'
-                    },
-                    timeout: 15000 // Увеличиваем таймаут
-                }
-            );
-
-            console.log('✅ Update successful, status:', response.status);
-            return true;
-
-        } catch (error) {
-            console.error(`❌ Attempt ${attempt} failed:`);
-            
-            if (error.response) {
-                // Ошибка от сервера (4xx, 5xx)
-                console.error('Status:', error.response.status);
-                console.error('Data:', error.response.data);
-                
-                // Если ошибка клиента (4xx) - не повторяем
-                if (error.response.status >= 400 && error.response.status < 500) {
-                    console.log('🚫 Client error, not retrying');
-                    return false;
-                }
-            } else if (error.request) {
-                // Сетевая ошибка
-                console.error('Network error:', error.message);
-            } else {
-                // Другие ошибки
-                console.error('Error:', error.message);
-            }
-
-            // Если это не последняя попытка - ждем и повторяем
-            if (attempt < maxRetries) {
-                console.log(`⏳ Retrying in ${retryDelay/1000} seconds...`);
-                await new Promise(resolve => setTimeout(resolve, retryDelay));
-            } else {
-                console.log('🚫 All update attempts failed');
-                return false;
-            }
+    try {
+        const accessToken = await getValidToken();
+        if (!accessToken) {
+            console.log('❌ No valid token for update');
+            return false;
         }
+
+        const updateData = {
+            first_name: parsedData.firstName || '',
+            last_name: parsedData.lastName || ''
+        };
+
+        console.log('🔄 Update contact request:', updateData);
+
+        const response = await axios.patch(
+            `https://${AMOCRM_DOMAIN}.amocrm.ru/api/v4/contacts/${contactId}`,
+            updateData,
+            {
+                headers: {
+                    'Authorization': `Bearer ${accessToken}`,
+                    'Content-Type': 'application/json',
+                    'Accept': 'application/json'
+                },
+                timeout: 15000
+            }
+        );
+
+        console.log('✅ Update successful, status:', response.status);
+        return true;
+
+    } catch (error) {
+        console.error('❌ Update contact error:');
+
+        if (error.response) {
+            console.error('Status:', error.response.status);
+            console.error('Data:', error.response.data);
+
+            // Ошибка клиента (например, 400, 404) — больше не пробуем
+            if (error.response.status >= 400 && error.response.status < 500) {
+                console.log('🚫 Client error, not retrying');
+                return false;
+            }
+        } else if (error.request) {
+            console.error('Network error:', error.message);
+        } else {
+            console.error('Error:', error.message);
+        }
+
+        return false;
     }
 }
 // Функция для проверки количества контактов в amoCRM
@@ -525,4 +543,5 @@ server.on('error', (err) => {
         }, 1000);
     }
 });
+
 
