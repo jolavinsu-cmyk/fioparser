@@ -176,33 +176,33 @@ async function startPeriodicCheck() {
     }, 2000);
     
     setInterval(async () => {
-        try {
-            if (!tokens) {
-                console.log('⏳ Waiting for authorization...');
-                return;
-            }
+    try {
+        if (!tokens) {
+            console.log('⏳ Waiting for authorization...');
+            return;
+        }
 
-            console.log('\n🔍 === STARTING PERIODIC CHECK ===');
-            console.log('🕐 Last check was:', lastCheckTime.toISOString());
-            
-            // Добавляем проверку количества контактов в каждую итерацию
-            await checkContactsCount();
-            
+        console.log('\n🔍 === STARTING PERIODIC CHECK ===');
+        
+        try {
             const contacts = await getRecentContacts();
             console.log(`📋 Found ${contacts.length} new contacts to process`);
             
             for (const contact of contacts) {
                 await processContact(contact);
             }
-
-            lastCheckTime = new Date();
-            console.log('✅ Check completed. New last check time:', lastCheckTime.toISOString());
-
         } catch (error) {
-            console.error('💥 Periodic check error:', error.message);
+            console.error('💥 Error in periodic check:', error.message);
+            // Продолжаем работу даже при ошибке
         }
-    }, 30000);
-}
+
+        lastCheckTime = new Date();
+        console.log('✅ Check completed. New last check time:', lastCheckTime.toISOString());
+
+    } catch (error) {
+        console.error('💥 Periodic check error:', error.message);
+    }
+}, 30000);
 
 // Получение последних контактов (ИСПРАВЛЕННАЯ ВЕРСИЯ)
 async function getRecentContacts() {
@@ -278,24 +278,14 @@ async function processContact(contact) {
 
         // Парсим ФИО
         const parsed = await parseFIO(contact.name);
-        console.log('Parsed result:');
-        console.log('- Last name:', parsed.lastName);
-        console.log('- First name:', parsed.firstName);
-        console.log('- Middle name:', parsed.middleName);
-
-        // Проверяем, нужно ли обновлять (ИЗМЕНИЛИ ЛОГИКУ!)
-        const originalParts = contact.name.trim().split(/\s+/);
+        
+        // Проверяем нужно ли обновлять
         const parsedFullName = `${parsed.firstName} ${parsed.lastName}`.trim();
         const needsUpdate = parsed.lastName && parsed.firstName && 
                           contact.name !== parsedFullName;
         
         if (!needsUpdate) {
             console.log('⚠️ Skip: No changes needed');
-            if (contact.name === parsedFullName) {
-                console.log('📝 Names are already in correct format');
-            } else {
-                console.log('❌ Not enough data to update');
-            }
             return;
         }
 
@@ -304,13 +294,16 @@ async function processContact(contact) {
             to: parsedFullName
         });
 
-        // Обновляем контакт в amoCRM
+        // Обновляем контакт с повторными попытками
         const success = await updateContactInAmoCRM(contact.id, parsed);
         
         if (success) {
             console.log('✅ Contact updated successfully');
+            
+            // Небольшая задержка перед следующим контактом
+            await new Promise(resolve => setTimeout(resolve, 500));
         } else {
-            console.log('❌ Failed to update contact');
+            console.log('❌ Failed to update contact after all attempts');
         }
 
     } catch (error) {
@@ -320,46 +313,70 @@ async function processContact(contact) {
 
 // Обновление контакта (С УЛУЧШЕННОЙ ОБРАБОТКОЙ ОШИБОК)
 async function updateContactInAmoCRM(contactId, parsedData) {
-    try {
-        const accessToken = await getValidToken();
-        if (!accessToken) {
-            console.log('❌ No valid token for update');
-            return false;
-        }
-
-        // Теперь используем только lastName и firstName
-        // middleName уже объединен в firstName
-        const updateData = {
-            first_name: parsedData.firstName || '',
-            last_name: parsedData.lastName || ''
-        };
-
-        console.log('Updating contact with:', updateData);
-
-        const response = await axios.patch(
-            `https://${AMOCRM_DOMAIN}.amocrm.ru/api/v4/contacts/${contactId}`,
-            updateData,
-            {
-                headers: {
-                    'Authorization': `Bearer ${accessToken}`,
-                    'Content-Type': 'application/json',
-                    'Accept': 'application/json'
-                },
-                timeout: 10000
+    const maxRetries = 3;
+    const retryDelay = 2000; // 2 секунды между попытками
+    
+    for (let attempt = 1; attempt <= maxRetries; attempt++) {
+        try {
+            const accessToken = await getValidToken();
+            if (!accessToken) {
+                console.log('❌ No valid token for update');
+                return false;
             }
-        );
 
-        console.log('✅ Update response status:', response.status);
-        return response.status === 200;
+            const updateData = {
+                first_name: parsedData.firstName || '',
+                last_name: parsedData.lastName || ''
+            };
 
-    } catch (error) {
-        if (error.response) {
-            console.error('❌ API Error:', error.response.status);
-            console.error('❌ API Response:', JSON.stringify(error.response.data, null, 2));
-        } else {
-            console.error('❌ Network Error:', error.message);
+            console.log(`🔄 Update attempt ${attempt}/${maxRetries}:`, updateData);
+
+            const response = await axios.patch(
+                `https://${AMOCRM_DOMAIN}.amocrm.ru/api/v4/contacts/${contactId}`,
+                updateData,
+                {
+                    headers: {
+                        'Authorization': `Bearer ${accessToken}`,
+                        'Content-Type': 'application/json',
+                        'Accept': 'application/json'
+                    },
+                    timeout: 15000 // Увеличиваем таймаут
+                }
+            );
+
+            console.log('✅ Update successful, status:', response.status);
+            return true;
+
+        } catch (error) {
+            console.error(`❌ Attempt ${attempt} failed:`);
+            
+            if (error.response) {
+                // Ошибка от сервера (4xx, 5xx)
+                console.error('Status:', error.response.status);
+                console.error('Data:', error.response.data);
+                
+                // Если ошибка клиента (4xx) - не повторяем
+                if (error.response.status >= 400 && error.response.status < 500) {
+                    console.log('🚫 Client error, not retrying');
+                    return false;
+                }
+            } else if (error.request) {
+                // Сетевая ошибка
+                console.error('Network error:', error.message);
+            } else {
+                // Другие ошибки
+                console.error('Error:', error.message);
+            }
+
+            // Если это не последняя попытка - ждем и повторяем
+            if (attempt < maxRetries) {
+                console.log(`⏳ Retrying in ${retryDelay/1000} seconds...`);
+                await new Promise(resolve => setTimeout(resolve, retryDelay));
+            } else {
+                console.log('🚫 All update attempts failed');
+                return false;
+            }
         }
-        return false;
     }
 }
 // Функция для проверки количества контактов в amoCRM
@@ -506,6 +523,7 @@ server.on('error', (err) => {
         }, 1000);
     }
 });
+
 
 
 
