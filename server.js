@@ -66,12 +66,12 @@ async function lazyLoadNextFileIfNeeded(missingWords) {
         } else {
             console.log(`⚠️ File data${NAME_DATABASE.currentFileIndex}.txt not found`);
             NAME_DATABASE.currentFileIndex++;
-            return true; // Продолжаем尝试 следующий файл
+            return true; // Продолжаем следующий файл
         }
     } catch (error) {
         console.error('❌ Error loading file:', error.message);
         NAME_DATABASE.currentFileIndex++;
-        return true; // Продолжаем尝试 следующий файл
+        return true; // Продолжаем следующий файл
     }
 }
 
@@ -81,6 +81,7 @@ async function parseFIO(fullName) {
     const parts = fullName.trim().split(/\s+/).filter(part => part.length > 0);
     
     console.log(`\n🔍 Parsing: "${fullName}"`);
+    console.log(`📊 Current database: file ${NAME_DATABASE.currentFileIndex-1}, words: ${NAME_DATABASE.surnames.size + NAME_DATABASE.firstNames.size + NAME_DATABASE.patronymics.size}`);
     
     const result = {
         surname: '',
@@ -91,16 +92,13 @@ async function parseFIO(fullName) {
 
     let attempts = 0;
     const maxAttempts = NAME_DATABASE.maxFiles;
-    let allWordsFound = false;
     
-    while (attempts < maxAttempts && !allWordsFound) {
+    while (attempts < maxAttempts) {
         attempts++;
         let missingWords = [];
+        let allFound = true;
         
-        // СБРОСИМ ФЛАГ ПЕРЕД ПРОВЕРКОЙ
-        allWordsFound = true;
-        
-        // Проверяем каждое слово
+        // Проверяем каждое слово в текущей базе
         for (const part of parts) {
             const lowerPart = part.toLowerCase();
             let found = false;
@@ -108,41 +106,40 @@ async function parseFIO(fullName) {
             if (isWordInDatabase(part, 'surnames') && !result.surname) {
                 result.surname = part;
                 found = true;
-                console.log(`- ✅ "${part}" → surname`);
+                console.log(`- ✅ "${part}" → surname (from DB)`);
             } 
             else if (isWordInDatabase(part, 'firstNames') && !result.firstName) {
                 result.firstName = result.firstName ? `${result.firstName} ${part}` : part;
                 found = true;
-                console.log(`- ✅ "${part}" → first name`);
+                console.log(`- ✅ "${part}" → first name (from DB)`);
             }
             else if (isWordInDatabase(part, 'patronymics') && !result.patronymic) {
                 result.patronymic = result.patronymic ? `${result.patronymic} ${part}` : part;
                 found = true;
-                console.log(`- ✅ "${part}" → patronymic`);
+                console.log(`- ✅ "${part}" → patronymic (from DB)`);
             }
             
             if (!found) {
                 missingWords.push(part);
-                allWordsFound = false; // ЕСТЬ НЕНАЙДЕННЫЕ СЛОВА
+                allFound = false;
             }
         }
         
-        // ЕСЛИ ВСЕ СЛОВА НАЙДЕНЫ - НЕМЕДЛЕННЫЙ ВЫХОД
-        if (allWordsFound) {
-            console.log('🎯 ALL WORDS FOUND! Stopping search.');
+        // Если ВСЕ слова найдены - выходим
+        if (allFound) {
+            console.log('🎯 All words found! Stopping search.');
             break;
         }
         
-        // ЕСЛИ БАЗА ПОЛНОСТЬЮ ЗАГРУЖЕНА - ВЫХОД
+        // Если база полностью загружена - выходим
         if (NAME_DATABASE.isFullyLoaded) {
-            console.log('📦 Database fully loaded, stopping.');
+            console.log('📦 Database fully loaded, stopping search.');
             break;
         }
         
-        // Загружаем следующий файл ТОЛЬКО если есть missingWords
+        // Загружаем следующий файл только для недостающих слов
         if (missingWords.length > 0) {
-            console.log(`📂 Loading file data${NAME_DATABASE.currentFileIndex}.txt for: ${missingWords.join(', ')}`);
-            const loaded = await lazyLoadNextFileIfNeeded();
+            const loaded = await lazyLoadNextFileIfNeeded(missingWords);
             if (!loaded) {
                 NAME_DATABASE.isFullyLoaded = true;
                 break;
@@ -170,26 +167,23 @@ async function parseFIO(fullName) {
     }
     
     // Объединяем для amoCRM
-    const fullFirstNameParts = [
-    result.firstName || '', 
-    result.patronymic || '', 
-    ...(result.unknown || [])
-].filter(part => part && typeof part === 'string' && part.trim().length > 0);
-
-const fullFirstName = fullFirstNameParts.join(' ').trim();
-
-console.log('📊 Final result:');
-console.log(`- Surname: "${result.surname || ''}"`);
-console.log(`- First name: "${result.firstName || ''}"`);
-console.log(`- Patronymic: "${result.patronymic || ''}"`);
-console.log(`- Unknown: ${result.unknown || []}`);
-console.log(`- Combined: "${result.surname || ''}" / "${fullFirstName}"`);
-
-return {
-    lastName: result.surname || '',
-    firstName: fullFirstName || '',
-    patronymic: result.patronymic || ''
-};
+    const fullFirstName = [result.firstName, result.patronymic, ...result.unknown]
+        .filter(Boolean)
+        .join(' ')
+        .trim();
+    
+    console.log('📊 Final result:');
+    console.log(`- Surname: "${result.surname}"`);
+    console.log(`- First name: "${result.firstName}"`);
+    console.log(`- Patronymic: "${result.patronymic}"`);
+    console.log(`- Unknown: ${result.unknown}`);
+    console.log(`- Combined: "${result.surname}" / "${fullFirstName}"`);
+    
+    return {
+        lastName: result.surname || '',
+        firstName: fullFirstName || '',
+        patronymic: result.patronymic || ''
+    };
 }
 // Конфигурация OAuth (замените на свои данные)
 const CLIENT_ID = process.env.AMOCRM_CLIENT_ID || 'd30b21ee-878a-4fe4-9434-ccc2a12b22fd';
@@ -573,6 +567,7 @@ server.on('error', (err) => {
         }, 1000);
     }
 });
+
 
 
 
