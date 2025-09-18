@@ -45,7 +45,8 @@ async function searchInFile(word, category, fileIndex) {
         }
         
         return false;
-    } catch (error) {
+    } 
+    catch (error) {
         console.error(`❌ Error searching in data${fileIndex}.txt:`, error.message);
         return false;
     }
@@ -203,6 +204,7 @@ async function startPeriodicCheck() {
         console.error('💥 Periodic check error:', error.message);
     }
 }, 30000);
+}
 
 // Получение последних контактов (ИСПРАВЛЕННАЯ ВЕРСИЯ)
 async function getRecentContacts() {
@@ -523,35 +525,3 @@ server.on('error', (err) => {
         }, 1000);
     }
 });
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
