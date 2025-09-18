@@ -117,22 +117,25 @@ async function parseFIO(fullName) {
     }
   }
 
-  // Формируем firstName: имя + отчество и неизвестные (как у тебя)
+  // Формируем firstName: имя + отчество и неизвестные
   const fullFirstName = [
     result.firstName || '',
     result.patronymic || '',
     ...(result.unknown || [])
   ].filter(p => p && p.trim().length > 0).join(' ').trim();
 
+  // ⚡️ ВАЖНО: фамилия может остаться пустой, если не определена
+  const lastNameFinal = result.surname ? result.surname : '';
+
   console.log('📊 Final result:');
-  console.log(`- Surname: "${result.surname}"`);
+  console.log(`- Surname: "${lastNameFinal}"`);
   console.log(`- First name: "${result.firstName}"`);
   console.log(`- Patronymic: "${result.patronymic}"`);
   console.log(`- Unknown: ${result.unknown}`);
-  console.log(`- Combined: "${result.surname}" / "${fullFirstName}"`);
+  console.log(`- Combined: "${lastNameFinal}" / "${fullFirstName}"`);
 
   return {
-    lastName: result.surname || '',
+    lastName: lastNameFinal,
     firstName: fullFirstName || '',
     patronymic: result.patronymic || ''
   };
@@ -493,3 +496,4 @@ server.on('error', (err) => {
     console.error('Server error:', err);
   }
 });
+
