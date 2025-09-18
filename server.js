@@ -351,15 +351,37 @@ async function processContact(contact) {
     console.log('💾 Saved parsed state:', state);
 
     // Шаг 2: проверяем есть ли смысл обновлять
-    const parsedFullName = `${state.parsedData.firstName} ${state.parsedData.lastName}`.trim();
-    const needsUpdate = state.parsedData.firstName && contact.name !== parsedFullName;
-
-    if (!needsUpdate) {
-      console.log('⚠️ Skip: No changes needed — removing from memory.');
+    // нормализация строки (trim + toString)
+    const norm = s => (s === undefined || s === null) ? '' : String(s).trim();
+  
+    // существующие значения в карточке (если есть)
+    const existingFirst = norm(contact.first_name);
+    const existingLast = norm(contact.last_name);
+    
+    // распарсенные значения
+    const parsedFirst = norm(state.parsedData.firstName);
+    const parsedLast = norm(state.parsedData.lastName);
+    
+    // если у нас вообще нет ничего распарсенного — ничего не делаем
+    if (!parsedFirst && !parsedLast) {
+      console.log('⚠️ Skip: nothing parsed (no first name and no last name) — removing from memory.');
       processingState.delete(contact.id);
       return;
     }
-
+    
+    // решаем обновлять, если хотя бы одно поле отличается
+    const needsUpdate = (parsedFirst !== existingFirst) || (parsedLast !== existingLast);
+    
+    console.log(`🔎 Compare fields: existingFirst="${existingFirst}", existingLast="${existingLast}" -> parsedFirst="${parsedFirst}", parsedLast="${parsedLast}"`);
+    if (!needsUpdate) {
+      console.log('⚠️ Skip: fields already match parsed data — removing from memory.');
+      processingState.delete(contact.id);
+      return;
+    }
+    
+    // Если дошли до сюда — нужно обновлять (будет идти цикл попыток ниже)
+      console.log('ℹ️ Update required: will attempt to update first_name/last_name for contact', contact.id);
+    
     // Шаг 3: внутренняя последовательность попыток обновления
     while (state.attempts < MAX_UPDATE_ATTEMPTS) {
       console.log(`🔄 Attempting update for contact ${contact.id} (attempt ${state.attempts + 1}/${MAX_UPDATE_ATTEMPTS})`);
@@ -496,5 +518,6 @@ server.on('error', (err) => {
     console.error('Server error:', err);
   }
 });
+
 
 
