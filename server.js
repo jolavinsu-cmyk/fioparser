@@ -416,6 +416,90 @@ async function processContact(contact) {
     }
   }
 }
+// ----------------------------
+// Загрузка и обработка всех контактов AmoCRM
+// ----------------------------
+async function getAllContacts() {
+  try {
+    const accessToken = await getValidToken();
+    if (!accessToken) {
+      console.log('❌ No valid token for full run');
+      return [];
+    }
+
+    let allContacts = [];
+    let page = 1;
+
+    while (true) {
+      console.log(`📥 Fetching contacts page ${page}...`);
+      const response = await axios.get(
+        `https://${AMOCRM_DOMAIN}.amocrm.ru/api/v4/contacts?page=${page}&limit=100&order=created_at`,
+        {
+          headers: {
+            'Authorization': `Bearer ${accessToken}`,
+            'Content-Type': 'application/json'
+          },
+          timeout: 15000
+        }
+      );
+
+      const contacts = response.data._embedded?.contacts || [];
+      allContacts = allContacts.concat(contacts);
+
+      if (!response.data._links || !response.data._links.next) {
+        break; // больше страниц нет
+      }
+      page++;
+    }
+
+    console.log(`📊 Total contacts fetched: ${allContacts.length}`);
+    return allContacts;
+  } catch (error) {
+    console.error('❌ Get all contacts error:', error.response?.data || error.message);
+    return [];
+  }
+}
+
+// ----------------------------
+// Полная обработка всех контактов (с предупреждением)
+// ----------------------------
+let fullRunPending = false;
+
+app.get('/confirm-full-run', async (req, res) => {
+  if (!fullRunPending) {
+    // Первая попытка
+    fullRunPending = true;
+    res.send(`
+      <h2>⚠️ ВНИМАНИЕ: Вы собираетесь запустить обработку всех контактов в AmoCRM!</h2>
+      <p>Это может занять много времени и нагружает систему.</p>
+      <a href="/confirm-full-run?confirm=1">Да, я подтверждаю запуск</a>
+    `);
+    return;
+  }
+
+  // Вторая попытка с параметром confirm=1
+  if (req.query.confirm === '1') {
+    res.send('<h2>🚀 Полный запуск обработки всех контактов запущен. См. логи сервера.</h2>');
+
+    // Запуск в фоне
+    (async () => {
+      const contacts = await getAllContacts();
+      console.log(`🔄 Starting full processing of ${contacts.length} contacts...`);
+
+      for (const contact of contacts) {
+        await processContact(contact); // обрабатываем каждый контакт последовательно
+      }
+
+      console.log('✅ Full run completed!');
+      fullRunPending = false;
+    })();
+
+    return;
+  }
+
+  // Если confirm не передан
+  res.send('<p>❌ Ошибка подтверждения. Перейдите снова на <a href="/confirm-full-run">/confirm-full-run</a>.</p>');
+});
 
 // ----------------------------
 // Периодическая проверка
@@ -518,6 +602,7 @@ server.on('error', (err) => {
     console.error('Server error:', err);
   }
 });
+
 
 
 
