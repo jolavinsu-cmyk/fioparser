@@ -197,7 +197,7 @@ async function startPeriodicCheck() {
             console.log(`📋 Found ${contacts.length} new contacts to process`);
             
             for (const contact of contacts) {
-                await processContact(contact);
+                await (contact);
             }
         } catch (error) {
             console.error('💥 Error in periodic check:', error.message);
@@ -287,43 +287,41 @@ async function processContact(contact) {
 
         // Проверяем, не был ли уже обработан
         let state = processingState.get(contact.id);
-        if (state && (state.status === 'done' || state.status === 'failed')) {
-            console.log(`⚠️ Skip: Contact ${contact.id} already processed with status "${state.status}"`);
+        if (state) {
+            console.log(`⚠️ Skip: Contact ${contact.id} already in process with status "${state.status}"`);
             return;
         }
 
-        // Если контакта ещё нет в памяти → парсим
-        if (!state) {
-            const parsed = await parseFIO(contact.name);
-            state = {
-                status: 'parsed',
-                attempts: 0,
-                parsedData: parsed
-            };
-            processingState.set(contact.id, state);
-            console.log('💾 Parsed and saved state:', state);
-        }
+        // Парсим сразу
+        const parsed = await parseFIO(contact.name);
+        state = {
+            status: 'parsed',
+            attempts: 0,
+            parsedData: parsed
+        };
+        processingState.set(contact.id, state);
+        console.log('💾 Parsed and saved state:', state);
 
-        // Проверяем, нужно ли вообще обновлять
+        // Проверяем, есть ли смысл обновлять
         const parsedFullName = `${state.parsedData.firstName} ${state.parsedData.lastName}`.trim();
         const needsUpdate = state.parsedData.lastName && state.parsedData.firstName &&
                           contact.name !== parsedFullName;
 
         if (!needsUpdate) {
             console.log('⚠️ Skip: No changes needed');
-            processingState.set(contact.id, { ...state, status: 'done' });
+            processingState.delete(contact.id); // ❌ очищаем память
             return;
         }
 
-        // Цикл повторных попыток для одного контакта
+        // Цикл повторных попыток
         while (state.attempts < MAX_UPDATE_ATTEMPTS) {
             console.log(`🔄 Updating contact (attempt ${state.attempts + 1}/${MAX_UPDATE_ATTEMPTS})`);
             const success = await updateContactInAmoCRM(contact.id, state.parsedData);
 
             if (success) {
                 console.log('✅ Contact updated successfully');
-                processingState.set(contact.id, { ...state, status: 'done' });
-                return; // завершаем обработку
+                processingState.delete(contact.id); // ❌ очищаем память
+                return;
             }
 
             state.attempts++;
@@ -331,16 +329,17 @@ async function processContact(contact) {
 
             if (state.attempts >= MAX_UPDATE_ATTEMPTS) {
                 console.log(`🚫 Contact ${contact.id} failed after ${MAX_UPDATE_ATTEMPTS} attempts`);
-                processingState.set(contact.id, { ...state, status: 'failed' });
+                processingState.delete(contact.id); // ❌ очищаем память
                 return;
             }
 
             console.log('❌ Update failed, retrying...');
-            await new Promise(r => setTimeout(r, 2000)); // задержка перед повтором
+            await new Promise(r => setTimeout(r, 2000));
         }
 
     } catch (error) {
         console.error('💥 Process contact error:', error.message);
+        processingState.delete(contact.id); // ❌ очищаем даже при ошибке
     }
 }
 
@@ -541,6 +540,7 @@ server.on('error', (err) => {
         }, 1000);
     }
 });
+
 
 
 
