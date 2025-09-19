@@ -13,10 +13,10 @@ const app = express();
 const PORT = process.env.PORT || 3000;
 
 // Конфигурация OAuth (замените на свои данные)
-const CLIENT_ID = process.env.AMOCRM_CLIENT_ID || 'd30b21ee-878a-4fe4-9434-ccc2a12b22fd';
-const CLIENT_SECRET = process.env.AMOCRM_CLIENT_SECRET || '0pz2EXM02oankmHtCaZOgFa3rESLXT6F282gVIozREZLHuuYzVyNAFtyYDXMNd2u';
+const CLIENT_ID = process.env.AMOCRM_CLIENT_ID || '8f3f615f-aa84-4c5b-b4fa-5c0dad4ad18c';
+const CLIENT_SECRET = process.env.AMOCRM_CLIENT_SECRET || '8s7o4V6PE1RAbe4QbRZ6XxdzEx0pl8s3MNGLilVWeEf32pR6XLW89UvUThrz5b1d';
 const REDIRECT_URI = process.env.REDIRECT_URI || 'https://fioparser.onrender.com/oauth/callback';
-const AMOCRM_DOMAIN = process.env.AMOCRM_DOMAIN || 'insain0';
+const AMOCRM_DOMAIN = process.env.AMOCRM_DOMAIN || 'insainintegratest';
 
 
 // ---------- База имён (как у тебя) ----------
@@ -602,6 +602,7 @@ server.on('error', (err) => {
     console.error('Server error:', err);
   }
 });
+
 
 
 
