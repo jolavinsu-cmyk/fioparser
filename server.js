@@ -20,7 +20,7 @@ const REDIRECT_URI = process.env.REDIRECT_URI || 'https://fioparser.onrender.com
 const AMOCRM_DOMAIN = process.env.AMOCRM_DOMAIN || 'insainintegratest';
 
 
-// ---------- Загрузка новых баз ----------
+// ---------- Загрузка баз ----------
 function loadDatabase(fileName) {
   const filePath = path.join(__dirname, `${fileName}.txt`);
   if (!fs.existsSync(filePath)) {
@@ -54,6 +54,21 @@ app.use(cors());
 app.use(express.json());
 
 // ----------------------------
+// Проверка окончания
+// ----------------------------
+function detectByEnding(word) {
+  const lower = word.toLowerCase();
+
+  const surnameEndings = ['ов', 'ев', 'ёв', 'ин', 'ын', 'ский', 'цкий', 'ко', 'юк', 'ич', 'енко'];
+  if (surnameEndings.some(e => lower.endsWith(e))) return 'surname';
+
+  const patronymicEndings = ['ович', 'евич', 'ич', 'овна', 'евна', 'ична', 'инична'];
+  if (patronymicEndings.some(e => lower.endsWith(e))) return 'patronymic';
+
+  return 'name';
+}
+
+// ----------------------------
 // Парсер ФИО
 // ----------------------------
 async function parseFIO(input) {
@@ -68,18 +83,31 @@ async function parseFIO(input) {
   for (const part of parts) {
     const lower = part.toLowerCase();
 
-    if (db.surnames.has(lower)) {
+    if (!surname && db.surnames.has(lower)) {
       surname = part;
-      console.log(`- ✅ "${part}" → surname`);
-    } else if (db.names.has(lower)) {
+      console.log(`- ✅ "${part}" → surname (db)`);
+    } else if (!firstName && db.names.has(lower)) {
       firstName = part;
-      console.log(`- ✅ "${part}" → first name`);
-    } else if (db.patronymics.has(lower)) {
+      console.log(`- ✅ "${part}" → first name (db)`);
+    } else if (!patronymic && db.patronymics.has(lower)) {
       patronymic = part;
-      console.log(`- ✅ "${part}" → patronymic`);
+      console.log(`- ✅ "${part}" → patronymic (db)`);
     } else {
-      unknown.push(part);
-      console.log(`- ❓ "${part}" → unknown`);
+      // Если базы не нашли → проверка окончаний
+      const detected = detectByEnding(part);
+      if (detected === 'surname' && !surname) {
+        surname = part;
+        console.log(`- 🔠 "${part}" → surname (ending)`);
+      } else if (detected === 'name' && !firstName) {
+        firstName = part;
+        console.log(`- 🔠 "${part}" → first name (ending)`);
+      } else if (detected === 'patronymic' && !patronymic) {
+        patronymic = part;
+        console.log(`- 🔠 "${part}" → patronymic (ending)`);
+      } else {
+        unknown.push(part);
+        console.log(`- ❓ "${part}" → unknown`);
+      }
     }
   }
 
@@ -95,6 +123,7 @@ async function parseFIO(input) {
     patronymic: patronymic || ''
   };
 }
+
 
 // ----------------------------
 // OAuth / токены (как у тебя)
@@ -431,6 +460,7 @@ server.on('error', (err) => {
     console.error('Server error:', err);
   }
 });
+
 
 
 
