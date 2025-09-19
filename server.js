@@ -335,6 +335,13 @@ async function processContact(contact) {
       return;
     }
 
+    // 🔎 Проверка на цифры и спецсимволы (разрешены только буквы, пробелы и скобки)
+    const invalidPattern = /[^a-zA-Zа-яА-ЯёЁ()\s]/u;
+    if (/\d/.test(contact.name) || invalidPattern.test(contact.name)) {
+      console.log(`🚫 Skip: Name "${contact.name}" contains digits or invalid symbols`);
+      return;
+    }
+
     // Не парсим контакты, которые уже обрабатываются сейчас в памяти
     if (processingState.has(contact.id)) {
       console.log(`⚠️ Contact ${contact.id} is already being processed — skipping duplicate invocation.`);
@@ -380,7 +387,7 @@ async function processContact(contact) {
     }
     
     // Если дошли до сюда — нужно обновлять (будет идти цикл попыток ниже)
-      console.log('ℹ️ Update required: will attempt to update first_name/last_name for contact', contact.id);
+    console.log('ℹ️ Update required: will attempt to update first_name/last_name for contact', contact.id);
     
     // Шаг 3: внутренняя последовательность попыток обновления
     while (state.attempts < MAX_UPDATE_ATTEMPTS) {
@@ -602,6 +609,7 @@ server.on('error', (err) => {
     console.error('Server error:', err);
   }
 });
+
 
 
 
