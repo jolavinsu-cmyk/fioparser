@@ -80,20 +80,17 @@ async function parseFIO(input) {
     }
   }
 
-  // --- Шаг 2: проверяем окончания только для неопределённых ---
+  // --- Шаг 2: проверяем окончания только для оставшихся ---
   function tryByEnding(word) {
     const lower = word.toLowerCase();
-    // фамилии
     if (!surname && /(?:ов|ев|ёв|ин|ын|ский|цкий|цкая|ова|ева|ёва|ина|ына|ская)$/i.test(lower)) {
       surname = word;
       return true;
     }
-    // отчества
     if (!patronymic && /(?:вич|вна)$/i.test(lower)) {
       patronymic = word;
       return true;
     }
-    // имена (типичные окончания)
     if (!firstName && /(?:ий|ый|ая|на|ся|ша|ля|ня)$/i.test(lower)) {
       firstName = word;
       return true;
@@ -103,21 +100,31 @@ async function parseFIO(input) {
 
   const stillUnknown = [];
   for (const word of unknown) {
-    if (!tryByEnding(word)) {
-      stillUnknown.push(word);
-    }
+    if (!tryByEnding(word)) stillUnknown.push(word);
   }
 
-  // --- Шаг 3: если что-то осталось неопределённым — добавляем в имя ---
-  if (stillUnknown.length > 0) {
-    firstName = [firstName, ...stillUnknown].filter(Boolean).join(' ');
+  // --- Шаг 3: валидность зависит от количества частей ---
+  let valid = false;
+  if (parts.length >= 3) {
+    // Нужно корректно определить все 3
+    valid = Boolean(firstName && surname && patronymic);
+  } else if (parts.length === 2) {
+    // Нужно корректно определить обе
+    valid = Boolean(
+      (firstName && surname) ||
+      (firstName && patronymic) ||
+      (surname && patronymic)
+    );
+  } else if (parts.length === 1) {
+    // Должна быть хоть одна корректная
+    valid = Boolean(firstName || surname || patronymic);
   }
 
-  // --- Шаг 4: результат ---
   return {
     lastName: surname || '',
     firstName: [firstName, patronymic].filter(Boolean).join(' ') || '',
-    patronymic: patronymic || ''
+    patronymic: patronymic || '',
+    valid
   };
 }
 
@@ -282,6 +289,13 @@ async function processContact(contact) {
     if (processingState.has(contact.id)) return;
 
     const parsed = await parseFIO(contact.name);
+
+    // Пропускаем, если парсер не уверен
+    if (!parsed.valid) {
+      console.log(`⚠️ Skip: could not reliably parse FIO for contact ${contact.id}`);
+      return;
+    }
+
     const state = { attempts: 0, parsedData: parsed };
     processingState.set(contact.id, state);
 
@@ -457,6 +471,7 @@ server.on('error', (err) => {
     console.error('Server error:', err);
   }
 });
+
 
 
 
