@@ -64,15 +64,16 @@ async function parseFIO(input) {
   let firstName = '';
   let patronymic = '';
   let unknown = [];
+  let foundNames = []; // собираем все найденные имена
 
-  // --- Шаг 1: проверяем базы ---
+  // Шаг 1: проверка по базам
   for (const part of parts) {
     const lower = part.toLowerCase();
 
     if (!surname && db.surnames.has(lower)) {
       surname = part;
-    } else if (!firstName && db.names.has(lower)) {
-      firstName = part;
+    } else if (db.names.has(lower)) {
+      foundNames.push(part);
     } else if (!patronymic && db.patronymics.has(lower)) {
       patronymic = part;
     } else {
@@ -80,7 +81,27 @@ async function parseFIO(input) {
     }
   }
 
-  // --- Шаг 2: проверяем окончания только для оставшихся ---
+  // Шаг 1.1: обработка ситуации с 2 именами
+  if (foundNames.length > 1 && !surname) {
+    for (let i = 0; i < foundNames.length; i++) {
+      const lower = foundNames[i].toLowerCase();
+      if (db.surnames.has(lower)) {
+        surname = foundNames[i];
+        foundNames.splice(i, 1); // удаляем из имён
+        break;
+      }
+    }
+  }
+
+  // Основное имя выбираем из оставшегося массива foundNames
+  if (!firstName && foundNames.length > 0) {
+    firstName = foundNames[0];
+    if (foundNames.length > 1) {
+      unknown.push(...foundNames.slice(1));
+    }
+  }
+
+  // Шаг 2: проверка окончаний только для оставшихся
   function tryByEnding(word) {
     const lower = word.toLowerCase();
     if (!surname && /(?:ов|ев|ёв|ин|ын|ский|цкий|цкая|ова|ева|ёва|ина|ына|ская)$/i.test(lower)) {
@@ -103,20 +124,17 @@ async function parseFIO(input) {
     if (!tryByEnding(word)) stillUnknown.push(word);
   }
 
-  // --- Шаг 3: валидность зависит от количества частей ---
+  // Шаг 3: определяем валидность
   let valid = false;
   if (parts.length >= 3) {
-    // Нужно корректно определить все 3
     valid = Boolean(firstName && surname && patronymic);
   } else if (parts.length === 2) {
-    // Нужно корректно определить обе
     valid = Boolean(
       (firstName && surname) ||
       (firstName && patronymic) ||
       (surname && patronymic)
     );
   } else if (parts.length === 1) {
-    // Должна быть хоть одна корректная
     valid = Boolean(firstName || surname || patronymic);
   }
 
@@ -471,6 +489,7 @@ server.on('error', (err) => {
     console.error('Server error:', err);
   }
 });
+
 
 
 
