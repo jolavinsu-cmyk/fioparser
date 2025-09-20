@@ -54,21 +54,6 @@ app.use(cors());
 app.use(express.json());
 
 // ----------------------------
-// Проверка окончания
-// ----------------------------
-function detectByEnding(word) {
-  const lower = word.toLowerCase();
-
-  const surnameEndings = ['ов', 'ев', 'ёв', 'ин', 'ын', 'ский', 'цкий', 'ко', 'юк', 'ич', 'енко'];
-  if (surnameEndings.some(e => lower.endsWith(e))) return 'surname';
-
-  const patronymicEndings = ['ович', 'евич', 'ич', 'овна', 'евна', 'ична', 'инична'];
-  if (patronymicEndings.some(e => lower.endsWith(e))) return 'patronymic';
-
-  return 'name';
-}
-
-// ----------------------------
 // Парсер ФИО
 // ----------------------------
 async function parseFIO(input) {
@@ -80,43 +65,55 @@ async function parseFIO(input) {
   let patronymic = '';
   let unknown = [];
 
+  // --- Шаг 1: проверяем базы ---
   for (const part of parts) {
     const lower = part.toLowerCase();
 
     if (!surname && db.surnames.has(lower)) {
       surname = part;
-      console.log(`- ✅ "${part}" → surname (db)`);
     } else if (!firstName && db.names.has(lower)) {
       firstName = part;
-      console.log(`- ✅ "${part}" → first name (db)`);
     } else if (!patronymic && db.patronymics.has(lower)) {
       patronymic = part;
-      console.log(`- ✅ "${part}" → patronymic (db)`);
     } else {
-      // Если базы не нашли → проверка окончаний
-      const detected = detectByEnding(part);
-      if (detected === 'surname' && !surname) {
-        surname = part;
-        console.log(`- 🔠 "${part}" → surname (ending)`);
-      } else if (detected === 'name' && !firstName) {
-        firstName = part;
-        console.log(`- 🔠 "${part}" → first name (ending)`);
-      } else if (detected === 'patronymic' && !patronymic) {
-        patronymic = part;
-        console.log(`- 🔠 "${part}" → patronymic (ending)`);
-      } else {
-        unknown.push(part);
-        console.log(`- ❓ "${part}" → unknown`);
-      }
+      unknown.push(part);
     }
   }
 
-  console.log('📊 Final result:');
-  console.log('- Surname:', surname || '(none)');
-  console.log('- First name:', firstName || '(none)');
-  console.log('- Patronymic:', patronymic || '(none)');
-  if (unknown.length) console.log('- Unknown:', unknown.join(' '));
+  // --- Шаг 2: проверяем окончания только для неопределённых ---
+  function tryByEnding(word) {
+    const lower = word.toLowerCase();
+    // фамилии
+    if (!surname && /(?:ов|ев|ёв|ин|ын|ский|цкий|цкая|ова|ева|ёва|ина|ына|ская)$/i.test(lower)) {
+      surname = word;
+      return true;
+    }
+    // отчества
+    if (!patronymic && /(?:вич|вна)$/i.test(lower)) {
+      patronymic = word;
+      return true;
+    }
+    // имена (типичные окончания)
+    if (!firstName && /(?:ий|ый|ая|на|ся|ша|ля|ня)$/i.test(lower)) {
+      firstName = word;
+      return true;
+    }
+    return false;
+  }
 
+  const stillUnknown = [];
+  for (const word of unknown) {
+    if (!tryByEnding(word)) {
+      stillUnknown.push(word);
+    }
+  }
+
+  // --- Шаг 3: если что-то осталось неопределённым — добавляем в имя ---
+  if (stillUnknown.length > 0) {
+    firstName = [firstName, ...stillUnknown].filter(Boolean).join(' ');
+  }
+
+  // --- Шаг 4: результат ---
   return {
     lastName: surname || '',
     firstName: [firstName, patronymic].filter(Boolean).join(' ') || '',
@@ -460,6 +457,7 @@ server.on('error', (err) => {
     console.error('Server error:', err);
   }
 });
+
 
 
 
