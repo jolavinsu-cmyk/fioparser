@@ -14,8 +14,8 @@ const PORT = process.env.PORT || 3000;
 
 
 // Конфигурация OAuth (замените на свои данные)
-const CLIENT_ID = process.env.AMOCRM_CLIENT_ID || '8f3f615f-aa84-4c5b-b4fa-5c0dad4ad18c';
-const CLIENT_SECRET = process.env.AMOCRM_CLIENT_SECRET || '8s7o4V6PE1RAbe4QbRZ6XxdzEx0pl8s3MNGLilVWeEf32pR6XLW89UvUThrz5b1d';
+const CLIENT_ID = process.env.AMOCRM_CLIENT_ID || '435f6df6-2ff8-42c1-abb4-fa5c65472070';
+const CLIENT_SECRET = process.env.AMOCRM_CLIENT_SECRET || 'LuN7GET96PBp4RTdnjs7AyqSsCnCeuuuMxQRKPwjwxLSDhdhYj4USe9egZ3jy9fq';
 const REDIRECT_URI = process.env.REDIRECT_URI || 'https://fioparser.onrender.com/oauth/callback';
 const AMOCRM_DOMAIN = process.env.AMOCRM_DOMAIN || 'insainintegratest';
 
@@ -489,6 +489,7 @@ server.on('error', (err) => {
     console.error('Server error:', err);
   }
 });
+
 
 
 
