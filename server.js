@@ -17,7 +17,7 @@ const PORT = process.env.PORT || 3000;
 const CLIENT_ID = process.env.AMOCRM_CLIENT_ID || '435f6df6-2ff8-42c1-abb4-fa5c65472070';
 const CLIENT_SECRET = process.env.AMOCRM_CLIENT_SECRET || 'LuN7GET96PBp4RTdnjs7AyqSsCnCeuuuMxQRKPwjwxLSDhdhYj4USe9egZ3jy9fq';
 const REDIRECT_URI = process.env.REDIRECT_URI || 'https://fioparser.onrender.com/oauth/callback';
-const AMOCRM_DOMAIN = process.env.AMOCRM_DOMAIN || 'insainintegratest';
+const AMOCRM_DOMAIN = process.env.AMOCRM_DOMAIN || 'insain';
 
 
 // ---------- Загрузка баз ----------
@@ -489,6 +489,7 @@ server.on('error', (err) => {
     console.error('Server error:', err);
   }
 });
+
 
 
 
